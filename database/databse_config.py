@@ -4,6 +4,7 @@ import dotenv
 import os
 dotenv.load_dotenv(override=True)
 
+
 async def get_mongo_db():
     client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
     try:
