@@ -5,16 +5,16 @@ import os
 dotenv.load_dotenv(override=True)
 
 async def get_mongo_db():
-    client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
+    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000)
     try:
-        db = client["underwritting"]
+        db = client["underwriting"]
         return db
-    finally:
-        client.close()
+    except Exception as e:
+        raise e
 
 async def get_postgres_conn():
     conn = await asyncpg.connect(os.getenv("POSTGRES_URI"))
     try:
         return conn
-    finally:
-        await conn.close()
+    except Exception as e:
+        raise e

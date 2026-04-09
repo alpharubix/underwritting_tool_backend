@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 from database.databse_config import get_mongo_db,get_postgres_conn
 from fastapi import FastAPI
 from uvicorn import run
+from routes.auth_router import auth_router
+from routes.user_route import user_router
+from middleware.authorization_middleware import authorization
 
 @asynccontextmanager
 async def connect_to_databases(app: FastAPI): #database first approch
@@ -23,5 +26,8 @@ async def connect_to_databases(app: FastAPI): #database first approch
             mongo_db.client.close()
 
 app = FastAPI(lifespan=connect_to_databases)
+app.middleware("http")(authorization)
+app.include_router(auth_router)
+app.include_router(user_router)
 
 run(app=app, host="localhost", port=8080)
