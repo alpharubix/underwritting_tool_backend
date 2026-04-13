@@ -1,6 +1,12 @@
-import httpx
 import os
 import json
+from datetime import datetime, timezone
+
+import httpx
+from motor.motor_asyncio import AsyncIOMotorClient
+from starlette.exceptions import HTTPException
+from starlette import status
+from custom_exceptions.bsa_exceptions import raise_bsa_exception
 
 async def upload_to_scoreme(files, data_params):
     payload = {"data": json.dumps(data_params)}
@@ -12,8 +18,9 @@ async def upload_to_scoreme(files, data_params):
 
     async with httpx.AsyncClient() as client:
         try:
+            request_initiated_time = datetime.now(timezone.utc)
             response = await client.post(
-                "https://sm-bsa-sandbox.scoreme.in/bsa/external/upload",
+                "https://sm-bsa-sandbox.scoreme.in/bsa/external/uploadbankstatement",
                 headers={
                     "clientId": os.getenv("CLIENT_ID"), # Matches your .env
                     "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
@@ -22,11 +29,64 @@ async def upload_to_scoreme(files, data_params):
                 files=files_to_send,
                 timeout=60.0
             )
-            
+            print("Response from ScoreMe API:",response.text)
+            result = response.json() #this never breaks because of scoreme proper json formated response for all the errors
+
+            raise_bsa_exception(result)  #Http exception will be raised here if any error code matches
+
             if response.status_code == 200:
-                result = response.json()
-                return result.get("data")
-            return None
-        except Exception as e:
-            print(f"ScoreMe API Exception: {e}")
-            return None
+                return result,request_initiated_time
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail={"message": "Unexpected response from ScoreMe."}
+                )
+            return result
+        except HTTPException as e: #caught the http exception raised by the bsa_exception function and re raise the error
+            raise e
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                                detail={"message": "ScoreMe request timed out."})
+        except Exception as e: #caught the non http execption error and re-rasie it as httpexception
+            print(f"ScoreMe API Exception raised at upload_to_scoreme function: {e}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message":"Internal server error please contact the admin for support."})
+
+
+async def create_bsa_ref_document(user_id, reference_id, input_data, bsa_request_status,
+                                    bsa_request_initiated_time,bsa_request_response_message,bsa_request_response_code,mongobd_connection: AsyncIOMotorClient):
+    try:
+        document = {
+            "user_id": user_id,
+            "reference_id": reference_id,
+            "input_data": input_data,
+            "bsa_request_status": bsa_request_status,
+            "bsa_request_initiated_at": bsa_request_initiated_time,
+            "bsa_request_response_message": bsa_request_response_message,
+            "bsa_request_response_code":bsa_request_response_code,
+
+            # Webhook fields — populated later
+            "webhook_response_status": "pending",
+            "webhook_response_code": None,
+            "webhook_response_message": None,
+            "webhook_received_at": None,
+
+            # Report URLs — populated after webhook
+            "report_urls": {
+                "json": None,
+                "excel": None
+            },
+
+            # Pipeline flag
+            "is_consumed": False,
+            "consumed_at": None,
+
+            # Timestamps
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        result = await mongobd_connection['bsa_reference'].insert_one(document)
+        return str(result.inserted_id)
+    except Exception as e:
+        print("Error occurred while creating a bsa reference document in create_bsa_ref_document.",e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error please contact the admin for support."})
