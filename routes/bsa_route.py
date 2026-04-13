@@ -1,10 +1,14 @@
 from fastapi.exceptions import HTTPException
+from fastapi  import BackgroundTasks
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload
+from controller.update_webhook_response import update_webhook_response
+
 from typing import List
 from tasks.bsa_tasks import process_reconciliation
+from controller.fetch_and_save_bank_report import fetch_and_save_bank_report
 import json
 
 bsa_router = APIRouter(prefix="/v1/bsa", tags=["BSA"])
@@ -54,6 +58,30 @@ async def scoreme_webhook(request: Request):
     
     return {"status": "error", "message": "Missing ref_id or json_url"}
 
+@bsa_router.post("/webhook_response")
+async def webhook_response(request:Request,background_tasks: BackgroundTasks):
+    payload = await request.json()
+    db = request.app.state.mongo_db
+    user_id = request.state.user_id
+    success=await update_webhook_response(user_id,payload,db)
+    if not success["success"]:
+        raise HTTPException(status_code=400, detail=success["error"])
+    
+    json_url = payload.get("data", {}).get("jsonUrl")
+    reference_id=payload.get("data", {}).get("referenceId")
+    if json_url:
+        # Pass db, user_id, and json_url to the consumer
+        background_tasks.add_task(
+            fetch_and_save_bank_report, 
+            db, 
+            user_id, 
+            reference_id,
+            json_url
+        )
+    return {"status": "success", "message": "Reference updated and report ingestion started"}
+    
+
+    
 
 
 
