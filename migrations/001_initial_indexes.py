@@ -1,10 +1,13 @@
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+import dotenv
+
+dotenv.load_dotenv()
 
 async def apply_indexes():
-    client = AsyncIOMotorClient(os.getenv("MONGO_URL"))
-    db = client["your_db_name"]
+    client = AsyncIOMotorClient(os.getenv("MONGO_URI"))
+    db = client[os.getenv("MONGODB_DB_NAME")]
     collection = db["bankstatementreport"]
 
     print("Applying optimized ESR indexes...")

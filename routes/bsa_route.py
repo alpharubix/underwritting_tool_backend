@@ -5,6 +5,7 @@ from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload
 from controller.update_webhook_response import update_webhook_response
+from controller.bank_statement_report import bank_statement_report
 
 from typing import List
 from tasks.bsa_tasks import process_reconciliation
@@ -81,7 +82,19 @@ async def webhook_response(request:Request,background_tasks: BackgroundTasks):
     return {"status": "success", "message": "Reference updated and report ingestion started"}
     
 
+
+@bsa_router.get("/calculated_bank_statement_report")
+async def bsa_Report(request:Request):
+    db = request.app.state.mongo_db
+    user_id = request.state.user_id
+    success_data = await bank_statement_report(db, user_id)
+    if success_data is None:
+        raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     
+    return {
+        "status": "success",
+        "data": success_data
+    }
 
 
 
