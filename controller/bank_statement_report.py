@@ -257,7 +257,19 @@ async def bank_statement_report(db,user_id:str):
         }
     ]
     
+    pipeline_monthly_report = [
+    {"$match": {"user_id": user_id}},
+    {
+        "$project": {
+            "OverView": "$analysis_metadata.Data.OverView"
+        }
+    },
+    {"$unwind": "$OverView"},
+    {"$replaceRoot": {"newRoot": "$OverView"}}
+    # {"$sort": {"Month": 1}}  # optional
+    ]
 
+    
     
     # try:    
     #     cursor=db.bankstatementreport.aggregate(pipeline)
@@ -269,14 +281,16 @@ async def bank_statement_report(db,user_id:str):
 
     try:
         logger.debug(
-            "bank_statement_report.pipeline_start | user_id=%s | stages=%d",
-            user_id, len(pipeline)
+            "bank_statement_report.pipeline_start | user_id=%s | stages=%d |stages_monthly=%s",
+            user_id, len(pipeline),len(pipeline_monthly_report)
         )
         pipeline_start = time.perf_counter()
 
         cursor = db.bankstatementreport.aggregate(pipeline)
-        result = await cursor.to_list(length=1)
+        cursor_monthly = db.bankstatementreport.aggregate(pipeline_monthly_report)
 
+        result = await cursor.to_list(length=1)
+        result_monthly=await cursor_monthly.to_list(length=None)
         pipeline_ms = (time.perf_counter() - pipeline_start) * 1000
         logger.info(
             "bank_statement_report.pipeline_done | user_id=%s | duration_ms=%.2f",
@@ -289,12 +303,22 @@ async def bank_statement_report(db,user_id:str):
                 user_id
             )
             return None
+        if not result_monthly:
+            logger.warning(
+                "bank_statement_report.empty_monthly_reports | user_id=%s",
+                user_id
+            )
+            return None
 
         logger.info(
             "bank_statement_report.success | user_id=%s | duration_ms=%.2f",
             user_id, pipeline_ms
         )
-        return result[0]
+        return {
+            "Consolidated_OverAll_Report": result[0],
+            "monthly_breakdown": result_monthly
+        }
+        
 
     except Exception as e:
         elapsed_ms = (time.perf_counter() - pipeline_start) * 1000
