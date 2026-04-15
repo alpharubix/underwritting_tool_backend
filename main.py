@@ -1,4 +1,16 @@
+import logging
+import asyncio
 from contextlib import asynccontextmanager
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+logging.getLogger("motor").setLevel(logging.WARNING)
+logging.getLogger("pymongo").setLevel(logging.WARNING)
+
 from database.databse_config import get_mongo_db,get_postgres_conn
 from fastapi import FastAPI
 from uvicorn import run
@@ -6,6 +18,9 @@ from routes.auth_router import auth_router
 from routes.user_route import user_router
 from middleware.authorization_middleware import authorization
 from routes.bsa_route import bsa_router
+
+
+logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def connect_to_databases(app: FastAPI): #database first approch
     try:

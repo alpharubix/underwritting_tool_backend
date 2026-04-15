@@ -50,8 +50,16 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
                 "source_url": json_url
             }
 
-            
-            await db["bankstatementreport"].insert_one(optimized_document)
+            # Instead of await db.collection.insert_one(optimized_document
+            await db["bankstatementreport"].replace_one(
+                {
+                    "user_id": user_id, 
+                    "reference_id": reference_id
+                },
+                optimized_document,
+                upsert=True  # If it exists, replace it. If not, create it.
+            )
+            # await db["bankstatementreport"].insert_one(optimized_document)
             print(f"SUCCESS: Optimized report stored for user {user_id}")
             return True
         
