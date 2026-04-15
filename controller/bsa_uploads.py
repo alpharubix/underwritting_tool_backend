@@ -1,12 +1,12 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
 from services.scoreme_service import upload_to_scoreme,create_bsa_ref_document
+from tasks.bsa_tasks import upload_files_to_gcs_and_save_metadata
 
-
-async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, files,data_params):
-    #validate meta field
+async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, files,data_params,BackgroundTask:BackgroundTasks):
+     #validate meta field
     try:
         required_fields = ["accountNumber", "entityType", "accountType", "bankCode"] #madatory input fields
 
@@ -16,6 +16,7 @@ async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, fil
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={"message":f"{field} is required"}
+
                 )
 
         if not files:
@@ -52,6 +53,9 @@ async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, fil
 
            #create the bsa_ref document post successfull response from the scoreme server
            await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
+
+           #create a background task to store the input bsa files to the storage object
+           BackgroundTask.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
 
         #return back the accepted message back to the clinet for every successfull uploads
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the mail got generated"})

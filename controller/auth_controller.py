@@ -14,93 +14,117 @@ import dotenv
 dotenv.load_dotenv()
 import os
 
-async def register_user(input_data:dict,postgres_conn:asyncpg.Connection,mongodb_database:AsyncIOMotorDatabase,background_tasks:BackgroundTasks)->dict:
+async def register_user(
+    input_data: dict,
+    postgres_conn: asyncpg.Connection,
+    mongodb_database: AsyncIOMotorDatabase,
+    background_tasks: BackgroundTasks
+) -> dict:
 
+    if not input_data.get('phone_no'):
+        return None
 
-    if input_data.get('phone_no'):#check if the user is already registered or not using phone number
-        company_name = input_data.get('company_name')
-        gst_number = input_data.get('gst_number')
-        email_id = input_data.get('email_id')
-        account_owner_id = os.getenv("ACCOUNT_OWNER_ID")#initailly for all user account owner will be the manager
-        created_by_id = os.getenv("CREATED_BY_ID")
-        phone_no = input_data.get("phone_no")
-        customer_name = input_data.get('customer_name')
+    company_name = input_data.get('company_name')
+    gst_number = input_data.get('gst_number')
+    email_id = input_data.get('email_id')
+    account_owner_id = os.getenv("ACCOUNT_OWNER_ID")
+    created_by_id = os.getenv("CREATED_BY_ID")
+    phone_no = input_data.get("phone_no")
+    customer_name = input_data.get('customer_name')
+    is_from_crm = input_data.get('is_from_crm_account', False)
 
-        #query the users db for this phone_no
-        try:
-             user_collection = mongodb_database['users']
-             auth_collection = mongodb_database['auth']
-             user = await user_collection.find_one({'phone':phone_no})
-             print("This is user",user)
+    try:
+        user_collection = mongodb_database['users']
+        auth_collection = mongodb_database['auth']
+        user = await user_collection.find_one({'phone': phone_no})
+        print("This is user", user)
 
-             if user: # if user exist redirect the customer to login page
-                 return JSONResponse(status_code=409, content={'message':'User already exists!'})
-             else:
-                 #if user doesnt exist check if the user has a account in crm or not
-                    existing_account = await postgres_conn.fetchrow(
-                        """
-                        SELECT id FROM accounts
-                        WHERE RIGHT(phone, 10) = RIGHT($1, 10)
-                        """,
-                        phone_no
+        if user:
+            return JSONResponse(status_code=409, content={'message': 'User already exists!'})
+
+        if is_from_crm:
+            account_id = input_data.get('account_id')
+            if not account_id:
+                return HTTPException(status_code=400, detail={"message": "account_id is required"})
+
+            login_id = generate_login_id(company_name=company_name, phone=phone_no)
+            password = generate_secure_password(length=8)
+            hashed_password = hash_password(password)
+
+            user = get_user_dict(account_id, login_id, email_id, phone_no, company_name, gst_number, customer_name)
+            auth = get_auth_dict(user.get("_id"), hashed_password)
+
+            await user_collection.insert_one(user)
+            await auth_collection.insert_one(auth)
+
+            return JSONResponse(  # FIX: was missing closing parenthesis
+                status_code=201,
+                content={
+                    'message': 'User registered successfully!',
+                    'data': {'login_id': f"{login_id}", 'password': f"{password}"}
+                }
+            )
+
+        else:
+            existing_account = await postgres_conn.fetchrow(
+                """
+                SELECT id FROM accounts
+                WHERE RIGHT(phone, 10) = RIGHT($1, 10)
+                """,
+                phone_no
+            )
+            print("Existing_accounts", existing_account)
+
+            if existing_account:
+                account_id = existing_account['id']
+            else:
+                account_id = await postgres_conn.fetchval(
+                    """
+                    INSERT INTO accounts (
+                        account_name,
+                        email,
+                        phone,
+                        account_owner_id,
+                        created_time,
+                        custom_fields,
+                        created_by_id
                     )
-                    print("Existing_accounts",existing_account)
-                    if existing_account:
-                        account_id = existing_account['id']
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+                    RETURNING id
+                    """,
+                    company_name,
+                    email_id,
+                    phone_no,
+                    int(account_owner_id),
+                    datetime.now(timezone.utc),
+                    json.dumps({"gst_number": gst_number, "customer_name": customer_name}),
+                    int(created_by_id)
+                )
 
-                        login_id = generate_login_id(company_name=company_name,phone=phone_no)
-                        password = generate_secure_password(length=8)
-                        hashed_password = hash_password(password)
+            login_id = generate_login_id(company_name=company_name, phone=phone_no)
+            password = generate_secure_password(length=8)
+            hashed_password = hash_password(password)
 
-                        user = get_user_dict(account_id,login_id,email_id,phone_no,company_name,gst_number,customer_name)
-                        auth = get_auth_dict(user.get("_id"),hashed_password)
+            user = get_user_dict(account_id, login_id, email_id, phone_no, company_name, gst_number, customer_name)
+            auth = get_auth_dict(user.get("_id"), hashed_password)
 
-                        await user_collection.insert_one(user)
-                        await auth_collection.insert_one(auth)
+            await user_collection.insert_one(user)
+            await auth_collection.insert_one(auth)
 
-                    else: #account does'nt exists create account then create user and auth
+            background_tasks.add_task(
+                send_registration_mail_to_user,
+                email_id,
+                {"name": company_name, "login_id": login_id, "password": password}
+            )
 
-                        account_id=await postgres_conn.fetchval(
-                                """
-                                INSERT INTO accounts (
-                                    account_name,
-                                    email,
-                                    phone,
-                                    account_owner_id,
-                                    created_time,
-                                    custom_fields,
-                                    created_by_id
-                                )
-                                VALUES ($1, $2, $3, $4, $5, $6::jsonb,$7)
-                                RETURNING id
-                                """,
-                                company_name,
-                                email_id,
-                                phone_no,
-                                int(account_owner_id),
-                                datetime.now(timezone.utc),
-                                json.dumps({"gst_number":gst_number,"customer_name":customer_name}),
-                                int(created_by_id)
+            return JSONResponse(
+                status_code=201,
+                content={'message': 'User registration successful, please check your mail for login credentials!'}
+            )
 
-                            )
-                        login_id = generate_login_id(company_name=company_name, phone=phone_no)
-                        password = generate_secure_password(length=8)
-                        hashed_password = hash_password(password)
-
-                        user = get_user_dict(account_id, login_id, email_id, phone_no, company_name, gst_number,customer_name)
-                        auth = get_auth_dict(user.get("_id"), hashed_password)
-
-                        await user_collection.insert_one(user)
-                        await auth_collection.insert_one(auth)
-
-                    #send mail once after the response is sent to the user so the latency will became less
-                    background_tasks.add_task(send_registration_mail_to_user,email_id,{"name":company_name,"login_id":login_id,"password":password})
-
-                    return JSONResponse(status_code=201, content={'message':'User registeration successful please check your mail for login credentails!'})
-        except Exception as e:
-         print("Error while creating user 5pointcreditsupport:", str(e))
-         raise HTTPException(status_code=500, detail="Error while creating user contact 5pointcreditsupport")
-    return None
+    except Exception as e:
+        print("Error while creating user 5pointcreditsupport:", str(e))
+        raise HTTPException(status_code=500, detail="Error while creating user contact 5pointcreditsupport")
 
 
 async def user_login(mongodb_connection, input_data: dict):

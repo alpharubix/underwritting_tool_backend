@@ -11,3 +11,5 @@ crm/
 .venv
 venv
 .env*
+GCP_STORAGE_SERVICE_ACCOUNT.json
+verificationDB

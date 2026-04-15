@@ -1,0 +1,108 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [3 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 5463 >>
+stream
+q
+0.2 w
+0.15 0.22 0.35 RG
+44 764 m 568 764 l S
+Q
+BT /F2 20 Tf 1 0 0 1 44 772 Tm (App Summary: Underwriting Tool Backend) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 754 Tm (Repo-based one-page overview) Tj ET
+BT /F2 15 Tf 1 0 0 1 44 748 Tm (What It Is) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 730 Tm (A FastAPI backend for onboarding users and processing bank statement analysis workflows.) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 718 Tm (It accepts PDF statement uploads, sends them to ScoreMe for analysis, stores workflow) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 706 Tm (state in MongoDB, links accounts in PostgreSQL, and ingests returned reports.) Tj ET
+BT /F2 15 Tf 1 0 0 1 44 690 Tm (Who It Is For) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 672 Tm (Primary persona: a business customer or loan applicant using an underwriting portal to) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 660 Tm (register, log in, and upload bank statements for review. Internal underwriting or ops) Tj ET
+BT /F1 10 Tf 1 0 0 1 44 648 Tm (teams likely consume the resulting data, but that user flow is not found in repo.) Tj ET
+BT /F2 15 Tf 1 0 0 1 44 632 Tm (What It Does) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 614 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 614 Tm (Registers users, creates linked account records, and emails login credentials.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 602 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 602 Tm (Authenticates users with JWT stored in an HTTP-only cookie.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 590 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 590 Tm (Returns the current authenticated user profile.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 578 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 578 Tm (Accepts up to 12 PDF bank statements plus account metadata per upload request.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 566 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 566 Tm (Submits uploads to the ScoreMe bank statement analysis API.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 554 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 554 Tm (Stores upload metadata and original PDFs in Google Cloud Storage and MongoDB.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 542 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 542 Tm (Consumes webhook/report URLs, updates reference records, and saves normalized bank) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 530 Tm (report data.) Tj ET
+BT /F2 15 Tf 1 0 0 1 44 514 Tm (How It Works) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 496 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 496 Tm (Client -> FastAPI routes \(`/v1/auth`, `/v1/user`, `/v1/bsa`\) with auth middleware) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 484 Tm (on non-public paths.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 472 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 472 Tm (FastAPI lifespan opens MongoDB and PostgreSQL connections and stores them on) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 460 Tm (`app.state`.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 448 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 448 Tm (Auth flow writes user/auth documents to MongoDB and may create/find an `accounts`) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 436 Tm (row in PostgreSQL.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 424 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 424 Tm (BSA upload flow validates PDFs and metadata, sends files to ScoreMe, and stores a) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 412 Tm (`bsa_reference` record in MongoDB.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 400 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 400 Tm (Background task uploads source PDFs to Google Cloud Storage and stores file) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 388 Tm (metadata in `bsa_file_uploads`.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 376 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 376 Tm (Webhook endpoint updates the reference record, then fetches the ScoreMe JSON) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 364 Tm (report and stores an optimized document in `bankstatementreport`.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 352 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 352 Tm (Celery app exists with Redis config and `tasks.bsa_tasks` import, but active) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 340 Tm (worker startup usage is not found in repo.) Tj ET
+BT /F2 15 Tf 1 0 0 1 44 324 Tm (How To Run) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 306 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 306 Tm (Create and activate a Python virtual environment.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 294 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 294 Tm (Install dependencies: `pip install -r requirements.txt`.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 282 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 282 Tm (Set required environment variables seen in code: `MONGO_URI`, `POSTGRES_URI`,) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 270 Tm (`JWT_SECRET_KEY`, `JWT_ALGORITHM`, `CLIENT_ID`, `CLIENT_SECRET`,) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 258 Tm (`GCS_BUCKET_NAME`, `APP_PASSWORD`, `ACCOUNT_OWNER_ID`, and `CREATED_BY_ID`.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 246 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 246 Tm (Provide Google Cloud credentials for the storage client. Exact setup method: Not) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 234 Tm (found in repo.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 222 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 222 Tm (Start the API with `python main.py` and it serves on port 8080.) Tj ET
+BT /F2 10 Tf 1 0 0 1 46 210 Tm (-) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 210 Tm (Optional infra implied by code: MongoDB, PostgreSQL, ScoreMe access, SMTP, and) Tj ET
+BT /F1 10 Tf 1 0 0 1 56 198 Tm (likely Redis/Celery; exact local bootstrap commands are Not found in repo.) Tj ET
+BT /F1 8 Tf 1 0 0 1 44 44 Tm (Evidence sources: main.py, routes/*, controller/*, services/scoreme_service.py, tasks/bsa_tasks.py,) Tj ET
+BT /F1 8 Tf 1 0 0 1 44 34 Tm (database/*, middleware/authorization_middleware.py, requirements.txt, migrations/001_initial_indexes.py) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000005772 00000 n 
+0000005842 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+5917
+%%EOF

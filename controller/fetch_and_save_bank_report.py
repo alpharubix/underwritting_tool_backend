@@ -61,10 +61,27 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
             )
             # await db["bankstatementreport"].insert_one(optimized_document)
             print(f"SUCCESS: Optimized report stored for user {user_id}")
+
+            #post successfull insertion of the document update the status flag in bsa_ref doc
+            await db['bsa_reference'].update_one(
+                {
+                    "reference_id": reference_id  # or _id if that's your key
+                },
+                {
+                    "$set": {
+                        "is_consumed": True,
+                        "consumed_at": datetime.now(timezone.utc),
+                    }
+                }
+            )
             return True
         
         else:
             print(f"FAILED: ScoreMe status {response.status_code}")
+            await db['bsa_reference'].update_one({"$set": {
+                "is_consumed": False,
+                "consumed_at": datetime.now(timezone.utc),
+            }})
             return False
 
     except Exception as e:

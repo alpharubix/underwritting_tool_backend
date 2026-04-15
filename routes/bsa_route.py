@@ -4,18 +4,19 @@ from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload
+from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
 from controller.bank_statement_report import bank_statement_report
-
 from typing import List
-from tasks.bsa_tasks import process_reconciliation
 from controller.fetch_and_save_bank_report import fetch_and_save_bank_report
+from controller.backgroud_task_controller import send_report_mail_based_on_request
 import json
 
 bsa_router = APIRouter(prefix="/v1/bsa", tags=["BSA"])
 @bsa_router.post("/upload")
 async def upload_bsa(
     request: Request,
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(None),
     data: str = Form(None)  # This will be the JSON string of your data block
 ):
@@ -29,7 +30,7 @@ async def upload_bsa(
         data_params = json.loads(data)
 
         # Pull the account number from the metadata we just parsed
-        response = await handle_bsa_upload(request.state.user_id,request.app.state.mongo_db,files,data_params)
+        response = await handle_bsa_upload(request.state.user_id,request.app.state.mongo_db,files,data_params,background_tasks)
     except JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -41,25 +42,9 @@ async def upload_bsa(
         raise e
     return response
 
-@bsa_router.post("/scoreme-callback")
-async def scoreme_webhook(request: Request):
-    full_body = await request.json()
-    
-    # Extract from the 'data' key based on the ScoreMe response you shared
-    inner_data = full_body.get("data", {})
-    
-    ref_id = inner_data.get("referenceId")
-    json_url = inner_data.get("jsonUrl")
-    
-    print(f"Webhook received! Ref: {ref_id}, URL: {json_url}")
 
-    if ref_id and json_url:
-        process_reconciliation.delay(ref_id, json_url)
-        return {"status": "accepted"}
-    
-    return {"status": "error", "message": "Missing ref_id or json_url"}
 
-@bsa_router.post("/webhook_response")
+@bsa_router.post("/webhook-response-handler")
 async def webhook_response(request:Request,background_tasks: BackgroundTasks):
     payload = await request.json()
     db = request.app.state.mongo_db
@@ -79,12 +64,20 @@ async def webhook_response(request:Request,background_tasks: BackgroundTasks):
             reference_id,
             json_url
         )
+
+        background_tasks.add_task(
+            send_report_mail_based_on_request,
+            user_id,
+            reference_id,
+            request.app.state.mongo_db,
+            request.app.state.postgres_conn,
+        )
     return {"status": "success", "message": "Reference updated and report ingestion started"}
     
 
 
-@bsa_router.get("/calculated_bank_statement_report")
-async def bsa_Report(request:Request):
+@bsa_router.get("/calculated-bank-statement-report")
+async def bsa_report(request:Request):
     db = request.app.state.mongo_db
     user_id = request.state.user_id
     success_data = await bank_statement_report(db, user_id)
@@ -97,7 +90,50 @@ async def bsa_Report(request:Request):
     }
 
 
+@bsa_router.post("/crm/upload")
+async def upload_bsa_crm(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(None),
+    data: str = Form(None),
+):
+    try:
+        if data is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "Input data is required"}
+            )
 
+        data_params = json.loads(data)
+
+        # account_id is the CRM identity bridge — mandatory for this route
+        account_id = data_params.get("account_id")
+        if not account_id or str(account_id).strip() == "":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"message": "account_id is required for CRM uploads"}
+            )
+
+        response = await handle_bsa_upload_crm(
+            account_id=account_id,
+            mongodb_connection=request.app.state.mongo_db,
+            pg_db = request.app.state.postgres_conn,
+            files=files,
+            data_params=data_params,
+            BackgroundTask=background_tasks
+        )
+
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Invalid JSON Input"}
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise e
+
+    return response
 
 
 
