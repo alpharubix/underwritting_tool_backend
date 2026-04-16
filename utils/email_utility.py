@@ -94,12 +94,12 @@ def build_bsa_report_mail_body(
 
     if is_crm:
         app_label = "Open CRM Application"
-        app_url   = "https://crm.meramerchant.com"       # replace with actual CRM URL
+        app_url   = "https://r1xchange-crm.netlify.app/login"       # replace with actual CRM URL
         app_note  = "Log in to your CRM portal to view the full analysis."
         btn_color = "#1E3A5F"
     else:
         app_label = "Open 5PointCredit"
-        app_url   = "https://app.5pointcredit.com"       # replace with actual app URL
+        app_url   = "https://5pointcredit.com/"       # replace with actual app URL
         app_note  = "Log in to your 5PointCredit account to view the full analysis."
         btn_color = "#2563EB"
 

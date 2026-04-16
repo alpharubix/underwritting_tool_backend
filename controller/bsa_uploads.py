@@ -58,7 +58,8 @@ async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, fil
            BackgroundTask.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
 
         #return back the accepted message back to the clinet for every successfull uploads
-        return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the mail got generated"})
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the report got"
+                                                                                    " generated"})
 
     except HTTPException as e: #caught the http exceptions raised at upload_to_scoreme
         raise e
