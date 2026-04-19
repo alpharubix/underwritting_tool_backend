@@ -1,3 +1,5 @@
+import re
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette import status
@@ -7,9 +9,22 @@ from utils.auth_utility import get_decoded_jwt_token
 
 async def authorization(request: Request, call_next):
     # Bypass OPTIONS and Public Routes
-    public_paths = ["/v1/auth/login", "/", "/v1/auth/register","/docs", "/openapi.json"]
+    public_patterns = [
+        r"^/v1/bsa/crm-bsa-statement-report/\w+$",
+        r"^/v1/bsa/crm/upload$",
+        r"^/v1/auth/login$",
+        r"^/v1/auth/register$",
+        r"^/v1/auth/forgot_password$",
+        r"^/v1/auth/validate-otp$",
+        r"^/v1/auth/reset_password$"
+        r"^/docs$",
+        r"^/openapi.json$",
+    ]
 
-    if request.method == "OPTIONS" or request.url.path in public_paths:
+    # Check if the current path matches any of our regex patterns
+    is_public = any(re.match(pattern, request.url.path) for pattern in public_patterns)
+
+    if request.method == "OPTIONS" or is_public:
         return await call_next(request)
 
     token = request.cookies.get('access_token')

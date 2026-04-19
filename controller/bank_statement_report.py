@@ -2,6 +2,7 @@ import logging
 import time
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
+from starlette import status
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,8 @@ async def bank_statement_report(db,user_id:str):
     start_time = time.perf_counter()
 
     try:
-        exists = await db.bankstatementreport.find_one({"user_id": user_id}, {"_id": 1})
+        exists = await db.bankstatementreport.find_one({"user_id": str(user_id)}, {"_id": 1})
+        print("exixting document: ",exists)
     except Exception as e:
         logger.error(
             "bank_statement_report.preflight_failed | user_id=%s | error=%s",
@@ -24,9 +26,12 @@ async def bank_statement_report(db,user_id:str):
             "bank_statement_report.not_found | user_id=%s | message=no documents found",
             user_id
         )
-        return None
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,detail={"message":"bank_statement_report not found for this account"}
+        )
     try:
-        doc_count = await db.bankstatementreport.count_documents({"user_id": user_id})
+        doc_count = await db.bankstatementreport.count_documents({"user_id": str(user_id)})
+        print("doc_count: ",doc_count)
         logger.info(
             "bank_statement_report.documents_found | user_id=%s | doc_count=%d",
             user_id, doc_count
@@ -38,7 +43,7 @@ async def bank_statement_report(db,user_id:str):
         )
 
     pipeline = [
-        {"$match": {"user_id": user_id}},
+        {"$match": {"user_id": str(user_id)}},
         {"$unwind": "$bank_statments"},
         {
             "$group": {
@@ -258,7 +263,7 @@ async def bank_statement_report(db,user_id:str):
     ]
     
     pipeline_monthly_report = [
-    {"$match": {"user_id": user_id}},
+    {"$match": {"user_id": str(user_id)}},
     {
         "$project": {
             "OverView": "$analysis_metadata.Data.OverView"
@@ -327,3 +332,19 @@ async def bank_statement_report(db,user_id:str):
             user_id, elapsed_ms, str(e), exc_info=True
         )
         raise
+
+
+async def get_crm_bank_statement_report(db,acc_id:int):
+    try:
+        if not acc_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"account id is required"})
+
+        user = await db['users'].find_one({'account_id': acc_id})
+        print("user_id=",user['_id'])
+        if not user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"account is not registered as user"})
+        result = await bank_statement_report(db,user["_id"])
+        print(result)
+        return result
+    except HTTPException as e:
+        raise e

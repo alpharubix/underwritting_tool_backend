@@ -1,7 +1,6 @@
 from bson import ObjectId
 from controller.email_controller import send_mail
-from utils.email_utility import create_body_for_new_registration, build_bsa_report_mail_body
-
+from utils.email_utility import create_body_for_new_registration, build_bsa_report_mail_body,create_body_for_password_reset
 
 def send_registration_mail_to_user(to,data):
     formated_body = create_body_for_new_registration(data)
@@ -49,3 +48,7 @@ async def send_report_mail_based_on_request(user_id, reference_id, mongodb, pg_d
         print(f"[Mail] Failed to send BSA report mail for reference_id {reference_id}: {e}")
 
 
+def send_reset_email_to_user(to, otp):
+    formatted_body = create_body_for_password_reset(otp)
+    subject = "5PointCredit Password Reset Code 🔐"
+    return send_mail(to, subject, formatted_body)

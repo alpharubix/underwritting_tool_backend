@@ -2,13 +2,12 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 
-def get_user_dict(account_id,login_id,email_id,phone_no,company_name,gst_number,customer_name)->dict:
+def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_name)->dict:
             user = {
                             # Identity
                             "_id":ObjectId(),
                             "account_id":account_id,#for mapping
-                            "login_id": login_id,
-                            "email": email_id.lower(),
+                            "email_id": email_id.lower(),
                             "customer_name": customer_name,
                             "email_verified": False,
                             "phone": phone_no,

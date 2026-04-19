@@ -13,15 +13,16 @@ async def handle_bsa_upload_crm(
     pg_db:connection,
     files,
     data_params: dict,
-    BackgroundTask: BackgroundTasks
+    BackgroundTask: BackgroundTasks,
+    crm_user_id:str
 ):
     #check if the request has crm_user_id or not because it is crucial for security reasons
 
-    crm_user = await get_crm_user(int(account_id),pg_db)
+    crm_user = await get_crm_user(int(crm_user_id),pg_db)
 
 
     # ── Step 1: Resolve internal user from CRM account_id
-    user = await mongodb_connection["users"].find_one({"account_id": account_id})
+    user = await mongodb_connection["users"].find_one({"account_id": int(account_id)})
 
     if not user:
         raise HTTPException(

@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
-from controller.bank_statement_report import bank_statement_report
+from controller.bank_statement_report import bank_statement_report,get_crm_bank_statement_report
 from typing import List
 from controller.fetch_and_save_bank_report import fetch_and_save_bank_report
 from controller.backgroud_task_controller import send_report_mail_based_on_request
@@ -107,11 +107,13 @@ async def upload_bsa_crm(
         data_params = json.loads(data)
 
         # account_id is the CRM identity bridge — mandatory for this route
-        account_id = data_params.get("account_id")
-        if not account_id or str(account_id).strip() == "":
+        account_id = data_params.pop("account_id", None)
+        crm_user_id = data_params.pop("crm_user_id", None)
+
+        if not account_id or str(account_id).strip() == "" or not crm_user_id or str(crm_user_id).strip() == "":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"message": "account_id is required for CRM uploads"}
+                detail={"message": "account_id and crm_user_id is required for CRM uploads"}
             )
 
         response = await handle_bsa_upload_crm(
@@ -120,7 +122,8 @@ async def upload_bsa_crm(
             pg_db = request.app.state.postgres_conn,
             files=files,
             data_params=data_params,
-            BackgroundTask=background_tasks
+            BackgroundTask=background_tasks,
+            crm_user_id=crm_user_id
         )
 
     except JSONDecodeError:
@@ -135,6 +138,16 @@ async def upload_bsa_crm(
 
     return response
 
-
-
+@bsa_router.get("/crm-bsa-statement-report/{acc_id}")
+async def crm_bsa_statement_report(request:Request,acc_id:str):
+    try:
+        acc_id = acc_id.strip()
+        return await get_crm_bank_statement_report(db=request.app.state.mongo_db,acc_id=int(acc_id))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message":"Internal server error please contact the admin for support."}
+        )
 

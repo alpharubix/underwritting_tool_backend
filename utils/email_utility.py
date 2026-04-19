@@ -190,3 +190,19 @@ def build_bsa_report_mail_body(
     """
 
     return subject, body
+
+def create_body_for_password_reset(otp):
+    return f"""
+    Hi,
+
+    We received a request to reset your password.
+
+    Your OTP is: {otp}
+
+    ⏳ This code will expire in 10 minutes.
+
+    If you did not request this, please ignore this email.
+
+    Regards,  
+    Team 5PointCredit
+    """

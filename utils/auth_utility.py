@@ -39,10 +39,11 @@ def verify_password(password: str, hashed: str) -> bool:
     """Verify a password against its bcrypt hash"""
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-def get_auth_dict(user_id,hashed_password)->dict:
+def get_auth_dict(user_id,hashed_password,email_id)->dict:
     auth = {
         "_id": ObjectId(),
         "user_id": user_id,
+        "email_id": email_id,
         "password_hash": hashed_password,
         "password_changed_at": datetime.now(timezone.utc)
     }
@@ -57,3 +58,22 @@ def get_decoded_jwt_token(token:str) -> dict:
     SECRET_KEY = os.getenv("JWT_SECRET_KEY")
     ALGORITHM = os.getenv("JWT_ALGORITHM")
     return jwt.decode(token,SECRET_KEY,ALGORITHM)
+
+
+def is_password_valid(password: str):
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter"
+
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter"
+
+    if not re.search(r"[0-9]", password):
+        return False, "Password must contain at least one digit"
+
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "Password must contain at least one special character"
+
+    return True, "Password is valid"
