@@ -199,7 +199,7 @@ def create_body_for_password_reset(otp):
 
     Your OTP is: {otp}
 
-    ⏳ This code will expire in 10 minutes.
+    ⏳ This code will expire in 5 minutes.
 
     If you did not request this, please ignore this email.
 
