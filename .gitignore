@@ -13,3 +13,11 @@ venv
 .env*
 GCP_STORAGE_SERVICE_ACCOUNT.json
 verificationDB
+API_DOCUMENTATION.pdf
+PROJECT_DOCUMENTATION.pdf
+generate_docs.py
+design_mockups
+.codex
+generate_docs.py
+
+

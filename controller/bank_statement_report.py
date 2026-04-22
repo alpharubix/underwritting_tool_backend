@@ -7,7 +7,7 @@ from starlette import status
 logger = logging.getLogger(__name__)
 
 
-async def bank_statement_report(db,user_id:str):
+async def bank_statement_report(db,user_id:str,):
 
     logger.info("bank_statement_report.start | user_id=%s", user_id)
     start_time = time.perf_counter()
@@ -348,3 +348,6 @@ async def get_crm_bank_statement_report(db,acc_id:int):
         return result
     except HTTPException as e:
         raise e
+    
+
+
