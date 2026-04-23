@@ -37,6 +37,17 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
             analysis_metadata["Data"] = {k: v for k, v in scoreme_data.items() 
                                          if k not in ["Bank Statement", "Account Details"]}
 
+
+            for entry in analysis_metadata.get("Data", {}).get("Summary Of Debit And Credit", []):
+                month_str = entry.get("month", "")
+                if month_str:
+                    try:
+                        entry["parsedMonthDate"] = datetime.strptime("01 " + month_str, "%d %b %Y")
+                    except ValueError:
+                        pass
+
+
+
             # 5. Build the Optimized Document
             optimized_document = {
                 "user_id": user_id,
