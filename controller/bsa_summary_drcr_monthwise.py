@@ -224,16 +224,16 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
         for entry in raw.get("monthly_breakdown", []):
             formatted_breakdown.append({
                 "month": entry["month"].lower(),
-                "inflows (value)": {
+                "inflows_value": {
                     "total_receipt_inflows_value": entry["total_Inflows_VALUE"]
                 },
-                "inflows (no.)": {
+                "inflows_no": {
                     "total_receipt_inflows_no": entry["total_Inflows_NO"]
                 },
-                "outflows (value)": {
+                "outflows_value": {
                     "total_payments_outflows_value": entry["total_Outflows_VALUE"]
                 },
-                "outflows (no.)": {
+                "outflows_no": {
                     "total_payments_outflows_no": entry["total_Outflows_NO"]
                 }
             })

@@ -3,7 +3,7 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-from controller.bsa_uploads import handle_bsa_upload
+from controller.bsa_uploads import handle_bsa_upload,bank_names
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
 from controller.bank_statement_report import bank_statement_report,get_crm_bank_statement_report
@@ -194,3 +194,15 @@ async def crm_bsa_statement_report(request:Request,acc_id:str):
             detail={"message":"Internal server error please contact the admin for support."}
         )
 
+@bsa_router.get("/get-bank-names")
+async def bsa_get_bank_names():
+    try:
+        return await bank_names()
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print("Error happened at get bank name route",e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Internal server error please contact the admin for support."}
+        )
