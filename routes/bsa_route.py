@@ -11,6 +11,7 @@ from typing import List, Optional
 from controller.fetch_and_save_bank_report import fetch_and_save_bank_report
 from controller.backgroud_task_controller import send_report_mail_based_on_request
 from controller.bsa_summary_drcr_monthwise import bsa_summary_of_debit_credit_monthwise
+from controller.cashflow_controller import build_cashflow_report
 import json
 from datetime import datetime
 
@@ -193,4 +194,20 @@ async def crm_bsa_statement_report(request:Request,acc_id:str):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message":"Internal server error please contact the admin for support."}
         )
+
+
+@bsa_router.get("/cashflow")
+async def cashflow_report(
+    request:    Request,
+    from_month: str = Query(..., description="Start month in YYYY-MM format, e.g. 2024-01"),
+    to_month:   str = Query(..., description="End month in YYYY-MM format, e.g. 2024-12"),
+):
+    db=request.app.state.mongo_db
+    user_id=request.state.user_id
+    result = await build_cashflow_report(db, user_id, from_month, to_month)
+ 
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result)
+ 
+    return result
 

@@ -19,5 +19,5 @@ generate_docs.py
 design_mockups
 .codex
 generate_docs.py
-
+tests/
 
