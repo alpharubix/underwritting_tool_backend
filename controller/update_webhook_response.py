@@ -8,6 +8,7 @@ async def update_webhook_response(user_id,payload,db):
     try:
         datablock=payload.get("data",{})
         ref_Id=datablock.get("referenceId")
+
         if not ref_Id:
             return {"success": False, "error": "No referenceId in payload"}
 

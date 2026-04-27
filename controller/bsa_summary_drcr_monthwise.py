@@ -32,29 +32,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
     normalized_from, normalized_to = normalize_date_range(from_date, to_date)
     logger.info("Normalized date range | from=%s | to=%s", normalized_from, normalized_to)
 
-    # try:
-    #     exists = await db.bankstatementreport.find_one({"user_id": str(user_id)}, {"_id": 1})
-    # except Exception as e:
-    #     logger.error("preflight_failed | user_id=%s | error=%s", user_id, str(e), exc_info=True)
-    #     raise HTTPException(
-    #         status_code=500,
-    #         detail={"message": "Database error during preflight check"}
-    #     )
-
-    # if not exists:
-    #     logger.warning("report_not_found | user_id=%s", user_id)
-    #     raise HTTPException(
-    #         status_code=404,
-    #         detail={"message": "Bank Statement Report not found for this user"}
-    #     )
-    
     try:
-        # docs_count=await db.bankstatementreport.count_documents({"user_id":str(user_id)})
-        # logger.info("Bank_statement_report |user_id=%s |docs_counts=%s",user_id,docs_count)
-        
-
-        
-
         pipeline = [
             # 1. Match by user_id
             {
@@ -67,7 +45,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
-                    "created_at": 1,
                     "analysis_metadata.Data.Summary Of Debit And Credit": 1
                 }
             },
@@ -77,7 +54,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                 "$unwind": "$analysis_metadata.Data.Summary Of Debit And Credit"
             },
 
-            # 4. Filter using stored parsedMonthDate (no conversion needed)
+            # 4. Filter by date range using stored parsedMonthDate
             {
                 "$match": {
                     "analysis_metadata.Data.Summary Of Debit And Credit.parsedMonthDate": {
@@ -87,110 +64,95 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                 }
             },
 
-            # 5. Deduplicate — latest document wins per month
-            {
-                "$sort": { "created_at": -1 }
-            },
-            {
-                "$group": {
-                    "_id": {
-                        "user_id": "$user_id",
-                        "month": "$analysis_metadata.Data.Summary Of Debit And Credit.month"
-                    },
-                    "parsedMonthDate":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.parsedMonthDate" },
-                    "cashdeposit":      { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.cashdeposit" },
-                    "chequeReceipt":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceipt" },
-                    "onlineReceipt":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceipt" },
-                    "otherRecipt":      { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.otherRecipt" },
-                    "inhouseRecipt":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.inhouseRecipt" },
-                    "cashdepositNo":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.cashdepositNo" },
-                    "chequeReceiptNo":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceiptNo" },
-                    "onlineReceiptNo":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceiptNo" },
-                    "otherReciptNo":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.otherReciptNo" },
-                    "inhouseReciptNo":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.inhouseReciptNo" },
-                    "cashwithDraw":     { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDraw" },
-                    "chequePayment":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.chequePayment" },
-                    "onlinePayment":    { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.onlinePayment" },
-                    "otherPayment":     { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.otherPayment" },
-                    "inhousePayment":   { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.inhousePayment" },
-                    "cashwithDrawNo":   { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDrawNo" },
-                    "chequePaymentNo":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.chequePaymentNo" },
-                    "onlinePaymentNo":  { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.onlinePaymentNo" },
-                    "otherPaymentNo":   { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.otherPaymentNo" },
-                    "inhousePaymentNo": { "$first": "$analysis_metadata.Data.Summary Of Debit And Credit.inhousePaymentNo" }
-                }
-            },
-
-            # 6. Calculate inflow/outflow per month
+            # 5. Calculate inflow/outflow per month (no dedup needed — single doc per user)
             {
                 "$project": {
-                    "user_id": "$_id.user_id",
-                    "month": "$_id.month",
-                    "parsedMonthDate": "$parsedMonthDate",   # ✅ reuse stored value, no recompute
+                    "user_id": 1,
+                    "month": "$analysis_metadata.Data.Summary Of Debit And Credit.month",
+                    "parsedMonthDate": "$analysis_metadata.Data.Summary Of Debit And Credit.parsedMonthDate",
                     "mw_inflow_val": {
                         "$add": [
-                            { "$toDouble": { "$ifNull": ["$cashdeposit",   "0"] } },
-                            { "$toDouble": { "$ifNull": ["$chequeReceipt", "0"] } },
-                            { "$toDouble": { "$ifNull": ["$onlineReceipt", "0"] } },
-                            { "$toDouble": { "$ifNull": ["$otherRecipt",   "0"] } },
-                            { "$toDouble": { "$ifNull": ["$inhouseRecipt", "0"] } }
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashdeposit", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceipt", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceipt", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherRecipt", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseRecipt", "0"]}}
                         ]
                     },
                     "mw_inflow_no": {
                         "$add": [
-                            { "$toDouble": { "$ifNull": ["$cashdepositNo",   0] } },
-                            { "$toDouble": { "$ifNull": ["$chequeReceiptNo", 0] } },
-                            { "$toDouble": { "$ifNull": ["$onlineReceiptNo", 0] } },
-                            { "$toDouble": { "$ifNull": ["$otherReciptNo",   0] } },
-                            { "$toDouble": { "$ifNull": ["$inhouseReciptNo", 0] } }
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashdepositNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceiptNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceiptNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherReciptNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseReciptNo", 0]}}
                         ]
                     },
                     "mw_outflow_val": {
                         "$add": [
-                            { "$toDouble": { "$ifNull": ["$cashwithDraw",   "0"] } },
-                            { "$toDouble": { "$ifNull": ["$chequePayment",  "0"] } },
-                            { "$toDouble": { "$ifNull": ["$onlinePayment",  "0"] } },
-                            { "$toDouble": { "$ifNull": ["$otherPayment",   "0"] } },
-                            { "$toDouble": { "$ifNull": ["$inhousePayment", "0"] } }
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDraw", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequePayment", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlinePayment", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherPayment", "0"]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePayment", "0"]}}
                         ]
                     },
                     "mw_outflow_no": {
                         "$add": [
-                            { "$toDouble": { "$ifNull": ["$cashwithDrawNo",   0] } },
-                            { "$toDouble": { "$ifNull": ["$chequePaymentNo",  0] } },
-                            { "$toDouble": { "$ifNull": ["$onlinePaymentNo",  0] } },
-                            { "$toDouble": { "$ifNull": ["$otherPaymentNo",   0] } },
-                            { "$toDouble": { "$ifNull": ["$inhousePaymentNo", 0] } }
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDrawNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequePaymentNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlinePaymentNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherPaymentNo", 0]}},
+                            {"$toDouble": {
+                                "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePaymentNo", 0]}}
                         ]
                     }
                 }
             },
 
-            # 7. Sort ascending by month
+            # 6. Sort ascending by month
             {
                 "$sort": {
-                    "user_id": 1,
                     "parsedMonthDate": 1
                 }
             },
 
-            # 8. Final group by user
+            # 7. Final group by user — build monthly breakdown + totals
             {
                 "$group": {
                     "_id": "$user_id",
                     "monthly_breakdown": {
                         "$push": {
                             "month": "$month",
-                            "total_Inflows_VALUE":  "$mw_inflow_val",
-                            "total_Inflows_NO":     "$mw_inflow_no",
+                            "total_Inflows_VALUE": "$mw_inflow_val",
+                            "total_Inflows_NO": "$mw_inflow_no",
                             "total_Outflows_VALUE": "$mw_outflow_val",
-                            "total_Outflows_NO":    "$mw_outflow_no"
+                            "total_Outflows_NO": "$mw_outflow_no"
                         }
                     },
-                    "total_Inflows_VALUE":  { "$sum": "$mw_inflow_val" },
-                    "total_Inflows_NO":     { "$sum": "$mw_inflow_no" },
-                    "total_Outflows_VALUE": { "$sum": "$mw_outflow_val" },
-                    "total_Outflows_NO":    { "$sum": "$mw_outflow_no" }
+                    "total_Inflows_VALUE": {"$sum": "$mw_inflow_val"},
+                    "total_Inflows_NO": {"$sum": "$mw_inflow_no"},
+                    "total_Outflows_VALUE": {"$sum": "$mw_outflow_val"},
+                    "total_Outflows_NO": {"$sum": "$mw_outflow_no"}
                 }
             }
         ]
@@ -206,7 +168,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
 
     try:
         pipeline_start = time.perf_counter()
-        cursor = db.bankstatementreport.aggregate(pipeline)
+        cursor = db.bsa_merged_bankstatements.aggregate(pipeline)
         result = await cursor.to_list(length=None)
         pipeline_end = time.perf_counter()
         logger.info(

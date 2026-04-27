@@ -29,7 +29,7 @@ async def send_report_mail_based_on_request(user_id, reference_id, mongodb, pg_d
                 print(f"[Mail] User not found in 5point credit system for user_id: {user_id}")
                 return
             user           = dict(user_row)
-            to_email       = user.get("email")
+            to_email       = user.get("email_id")
             recipient_name = user.get("company_name", "User")
 
         if not to_email:
