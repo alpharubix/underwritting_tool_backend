@@ -53,7 +53,7 @@ async def upload_to_scoreme(files, data_params):
 
 
 async def create_bsa_ref_document(user_id, reference_id, input_data, bsa_request_status,
-                                    bsa_request_initiated_time,bsa_request_response_message,bsa_request_response_code,mongobd_connection: AsyncIOMotorClient,is_request_from_crm=False,crm_user_info=None,):
+                                    bsa_request_initiated_time,bsa_request_response_message,bsa_request_response_code,mongobd_connection: AsyncIOMotorClient,is_request_from_crm=False,crm_user_info=None,is_merge_request=False,merge_request_status=None):
     try:
         document = {
             "user_id": user_id,
@@ -87,6 +87,10 @@ async def create_bsa_ref_document(user_id, reference_id, input_data, bsa_request
             # Timestamps
             "created_at": datetime.now(timezone.utc),
             "updated_at": datetime.now(timezone.utc),
+
+            #request differentiator flags for webhook handler
+            "is_merge_request": is_merge_request,
+            "merge_request_status": merge_request_status,
         }
 
         result = await mongobd_connection['bsa_reference'].insert_one(document)

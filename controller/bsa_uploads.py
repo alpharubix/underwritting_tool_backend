@@ -1,10 +1,13 @@
+import os
+import httpx
 from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
 from services.scoreme_service import upload_to_scoreme,create_bsa_ref_document
 from tasks.bsa_tasks import upload_files_to_gcs_and_save_metadata
-
+from dotenv import load_dotenv
+load_dotenv()
 async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, files,data_params,BackgroundTask:BackgroundTasks):
      #validate meta field
     try:
@@ -66,5 +69,30 @@ async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, fil
     except Exception as e:
         print("Error has been raised in bsa controller", e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message":"Internal server error please contact the admin for support."})
+
+
+
+async def bank_names():
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://sm-bsa-sandbox.scoreme.in/bsa/external/getBankNames",
+                headers={
+                    "clientId": os.getenv("CLIENT_ID"),
+                    "clientSecret": os.getenv("CLIENT_SECRET")
+                },
+            )
+            if response.status_code == 200:
+                data = response.json().get("data")
+                return JSONResponse(content={"message": "success","data":data})
+
+            else:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message":"Internal server error please contact the admin for support."})
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print("Error has been raised in bsa get bank names controller", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail={"message": "Internal server error please contact the admin for support."})
 
 

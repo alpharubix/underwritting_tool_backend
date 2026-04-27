@@ -1,7 +1,7 @@
 """
 Migration 002 — Backfill parsedMonthDate on existing bankstatementreport documents.
 
-New documents written after fetch_and_save_bank_report.py was updated already
+New documents written after bsa_webhook_controller.py was updated already
 carry parsedMonthDate as ISODate inside each Summary Of Debit And Credit entry.
 This script patches all older documents that are missing that field.
 

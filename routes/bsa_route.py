@@ -3,12 +3,12 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-from controller.bsa_uploads import handle_bsa_upload
+from controller.bsa_uploads import handle_bsa_upload,bank_names
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
 from controller.bank_statement_report import bank_statement_report,get_crm_bank_statement_report
 from typing import List, Optional
-from controller.fetch_and_save_bank_report import fetch_and_save_bank_report
+from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_reference_id_mergable, merge_reference_ids
 from controller.backgroud_task_controller import send_report_mail_based_on_request
 from controller.bsa_summary_drcr_monthwise import bsa_summary_of_debit_credit_monthwise
 from controller.cashflow_controller import build_cashflow_report
@@ -48,26 +48,32 @@ async def upload_bsa(
 
 
 @bsa_router.post("/webhook-response-handler")
-async def webhook_response(request:Request,background_tasks: BackgroundTasks):
+async def webhook_response(request: Request, background_tasks: BackgroundTasks):
     payload = await request.json()
     db = request.app.state.mongo_db
+    mongodb_connection = request.app.state.mongo_db  # or however your raw client is accessed
     user_id = request.state.user_id
-    success=await update_webhook_response(user_id,payload,db)
+    # Step 1: Update webhook response in DB
+    success = await update_webhook_response(user_id, payload, db)
     if not success["success"]:
         raise HTTPException(status_code=400, detail=success["error"])
-    
     json_url = payload.get("data", {}).get("jsonUrl")
-    reference_id=payload.get("data", {}).get("referenceId")
-    if json_url:
-        # Pass db, user_id, and json_url to the consumer
-        background_tasks.add_task(
-            fetch_and_save_bank_report, 
-            db, 
-            user_id, 
-            reference_id,
-            json_url
-        )
+    reference_id = payload.get("data", {}).get("referenceId")
 
+    if not json_url:
+        print("ScoreMe API failure — no jsonUrl in payload")
+        return {"status": "failure", "message": "ScoreMe API failure"}
+
+    if not reference_id:
+        print("No referenceId in payload")
+        raise HTTPException(status_code=400, detail="Missing referenceId in webhook payload")
+
+    # Step 2: Guard — if this reference_id is itself a merge result, store directly
+    # This prevents the infinite merge loop
+    ref_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id": reference_id})
+    if ref_doc and ref_doc.get("is_merge_request"):
+        print(f"reference_id {reference_id} is a merge result — storing directly")
+        background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
         background_tasks.add_task(
             send_report_mail_based_on_request,
             user_id,
@@ -75,11 +81,57 @@ async def webhook_response(request:Request,background_tasks: BackgroundTasks):
             request.app.state.mongo_db,
             request.app.state.postgres_conn,
         )
-    return {"status": "success", "message": "Reference updated and report ingestion started"}
-    
+        return {"status": "success", "message": "Merge result received — report ingestion started"}
+
+    merge_status = await is_reference_id_mergable(
+        user_id=user_id,
+        reference_id=reference_id,
+        json_url=json_url,
+        mongodb_connection=mongodb_connection
+    )
+
+    if merge_status == "MERGABLE":
+        existing_doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
+            {"user_id": user_id, "status": "ACTIVE"},
+            sort=[("created_at", -1)]
+        )
+
+        if not existing_doc:
+            print(f"WARN: No existing doc found for user {user_id} — storing directly")
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+            background_tasks.add_task(
+                send_report_mail_based_on_request, user_id, reference_id,
+                request.app.state.mongo_db, request.app.state.postgres_conn,
+            )
+            return {"status": "success", "message": "Fallback — report ingestion started"}
+
+        existing_reference_id = existing_doc["last_merged_reference_id"]
+        print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
+        background_tasks.add_task(merge_reference_ids, user_id, [existing_reference_id, reference_id],
+                                  mongodb_connection)
+        return {"status": "success", "message": "Merge initiated"}
+
+    elif merge_status == "NO_EXISTING_DOC":
+        # First report for this user — store directly
+        print(f"First report for user {user_id} — storing directly")
+        background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+        background_tasks.add_task(
+            send_report_mail_based_on_request, user_id, reference_id,
+            request.app.state.mongo_db, request.app.state.postgres_conn,
+        )
+        return {"status": "success", "message": "Report ingestion started"}
+
+    elif merge_status == "OVERLAP":
+        # ✅ Overlapping date range — reject, don't store
+        print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
+        return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
+
+    else:  # ERROR
+        print(f"ERROR: Could not determine merge status for user {user_id}")
+        raise HTTPException(status_code=500, detail="Could not validate report date range")
 
 
-@bsa_router.get("/calculated-bank-statement-report")
+@bsa_router.get("/month-wise-overview")
 async def bsa_report(request:Request):
     db = request.app.state.mongo_db
     user_id = request.state.user_id
@@ -211,3 +263,15 @@ async def cashflow_report(
  
     return result
 
+@bsa_router.get("/get-bank-names")
+async def bsa_get_bank_names():
+    try:
+        return await bank_names()
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print("Error happened at get bank name route",e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Internal server error please contact the admin for support."}
+        )
