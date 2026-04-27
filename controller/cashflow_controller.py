@@ -75,6 +75,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     # 2. Fetch documents from MongoDB
     query_start = from_dt.replace(tzinfo=timezone.utc)
     query_end = (to_dt + relativedelta(months=1)).replace(tzinfo=timezone.utc)
+    print(query_start, query_end)
 
     query = {
         "user_id": user_id,
@@ -83,7 +84,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     }
 
     # Sort by created_at to ensure consistent latest-wins logic
-    cursor = db["bankstatementreport"].find(query).sort("created_at", 1)
+    cursor = db["bsa_merged_bankstatements"].find(query).sort("created_at", 1)
     docs = await cursor.to_list(length=None)
 
     if not docs:
@@ -159,7 +160,6 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
 
     for i, ym_key in enumerate(sorted_month_keys):
         row, _ = final_monthly_map[ym_key]
-        
         # Capture Boundaries: Opening balance of first month, Closing of last month
         if i == 0:
             totals["opening"] = _safe_decimal(row.get("OpeningBalance"))
@@ -214,6 +214,10 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
 
         formatted_data.append(row)
 
+    for data in formatted_data:  #safely convert strings to decimal for precision
+        for key, value in data.items():
+            data[key] = _safe_decimal(data[key])
+
     # Formula Results
     gross_profit_c = totals["A_inflows"] - totals["B_outflows"]
     net_profit_f = gross_profit_c - totals["D_indirect_exp"] + totals["E_indirect_inc"]
@@ -223,7 +227,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         "status": "success",
         "data":{
             "summary": {
-                "inflows_revenue_a": float(totals["A_inflows"]),
+                "inflows_revenue_a": (totals["A_inflows"]),
                 "outflows_expenses_b": float(totals["B_outflows"]),
                 "gross_inflow_profit_c": float(gross_profit_c),
                 "indirect_expenses_d": float(totals["D_indirect_exp"]),
@@ -237,6 +241,6 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
                 "net_cashflow": float(totals["A_inflows"] - totals["B_outflows"])
             },
             "monthly_breakdown": formatted_data,
-            
-        }  
+
+        }
     }
