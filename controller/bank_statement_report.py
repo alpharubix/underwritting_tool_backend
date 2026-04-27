@@ -1,8 +1,11 @@
 import logging
 import time
+from datetime import datetime
+
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
 from starlette import status
+from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -583,4 +586,32 @@ async def get_crm_bank_statement_report(db,acc_id:int):
         raise e
     
 
+async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
+    try:
+        doc = await db.bsa_merged_bankstatements.find_one({'user_id': user_id})
 
+        if not doc:
+
+            return JSONResponse(status_code=status.HTTP_404_NOT_FOUND,content={"message":"No date range found for this user"})
+
+        from_date = doc.get("from_date")
+        to_date = doc.get("to_date")
+
+        if from_date:
+            from_date = from_date.isoformat().split("T")[0]
+
+        if to_date:
+            to_date = to_date.isoformat().split("T")[0]  # ✅ was mistakenly assigned to from_date
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "data": {
+                    "from_date": from_date,
+                    "to_date": to_date
+                }
+            }
+        )
+    except Exception as e:
+        print("Error happend at get_report_date_range controller",e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error"})

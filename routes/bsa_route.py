@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload,bank_names
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
-from controller.bank_statement_report import bank_statement_report,get_crm_bank_statement_report
+from controller.bank_statement_report import bank_statement_report, get_crm_bank_statement_report, get_report_date_range
 from typing import List, Optional
 from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_reference_id_mergable, merge_reference_ids
 from controller.backgroud_task_controller import send_report_mail_based_on_request
@@ -275,3 +275,11 @@ async def bsa_get_bank_names():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": "Internal server error please contact the admin for support."}
         )
+
+@bsa_router.get("/report-date-range")
+async def report_date_range(
+    request: Request):
+    try:
+        return await get_report_date_range(user_id=request.state.user_id,db=request.app.state.mongo_db)
+    except HTTPException as e:
+       raise e
