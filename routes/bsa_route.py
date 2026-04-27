@@ -12,6 +12,7 @@ from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_ref
 from controller.backgroud_task_controller import send_report_mail_based_on_request
 from controller.bsa_summary_drcr_monthwise import bsa_summary_of_debit_credit_monthwise
 from controller.cashflow_controller import build_cashflow_report
+from controller.overview_month_wise import bank_statement_report_consolidated
 import json
 from datetime import datetime
 
@@ -136,6 +137,20 @@ async def bsa_report(request:Request):
     db = request.app.state.mongo_db
     user_id = request.state.user_id
     success_data = await bank_statement_report(db, user_id)
+    if success_data is None:
+        raise HTTPException(status_code=404, detail="Bank statement not found for this user")
+    
+    return {
+        "status": "success",
+        "data": success_data
+    }
+
+@bsa_router.get("/consolidate-month-wise-overview")
+async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None)):
+    db = request.app.state.mongo_db
+    user_id = request.state.user_id
+    success_data = await bank_statement_report_consolidated(db, user_id,from_date,to_date)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     
