@@ -14,22 +14,30 @@ logger = logging.getLogger(__name__)
 # --- HELPERS ---
 
 def parse_any_month(month_str: str) -> datetime | None:
-    """Safely parse various month formats (YYYY-MM, Apr 2025, etc.)"""
     if not month_str:
         return None
-    formats = ["%Y-%m", "%b-%Y", "%m-%Y", "%b %Y", "%B %Y"]
+    
+    month_str = month_str.strip()
+
+    if len(month_str) >= 7 and month_str[4] == "-" and month_str[:4].isdigit():
+        try:
+            return datetime.strptime(month_str[:7], "%Y-%m")
+        except (ValueError, TypeError):
+            pass
+
+    formats = ["%b-%Y", "%m-%Y", "%b %Y", "%B %Y"]
     for fmt in formats:
         try:
-            return datetime.strptime(month_str.strip(), fmt)
+            return datetime.strptime(month_str, fmt)
         except (ValueError, TypeError):
             continue
+            
     return None
 
 def normalize_date_range(from_date: datetime, to_date: datetime):
-    """Align dates to the first of the month for clean comparison."""
-    normalized_from = from_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    normalized_to = to_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    return normalized_from, normalized_to
+            normalized_from = from_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            normalized_to   = to_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            return normalized_from, normalized_to
 
 def _safe_decimal(val: Any) -> Decimal:
     """Safely convert ScoreMe string values to Decimal for precision math."""
