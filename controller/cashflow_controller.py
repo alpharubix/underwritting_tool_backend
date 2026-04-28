@@ -216,7 +216,8 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
 
     for data in formatted_data:  #safely convert strings to decimal for precision
         for key, value in data.items():
-            data[key] = _safe_decimal(data[key])
+            if key !='MonthYear':
+                data[key] = _safe_decimal(data[key])
 
     # Formula Results
     gross_profit_c = totals["A_inflows"] - totals["B_outflows"]

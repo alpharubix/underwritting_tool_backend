@@ -33,7 +33,6 @@ async def upload_bsa(
 
         data_params = json.loads(data)
 
-        # Pull the account number from the metadata we just parsed
         response = await handle_bsa_upload(request.state.user_id,request.app.state.mongo_db,files,data_params,background_tasks)
     except JSONDecodeError:
         raise HTTPException(
@@ -123,7 +122,7 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         return {"status": "success", "message": "Report ingestion started"}
 
     elif merge_status == "OVERLAP":
-        # ✅ Overlapping date range — reject, don't store
+        # Overlapping date range — reject, don't store
         print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
         return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
 
@@ -133,19 +132,6 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
 
 
 @bsa_router.get("/month-wise-overview")
-async def bsa_report(request:Request):
-    db = request.app.state.mongo_db
-    user_id = request.state.user_id
-    success_data = await bank_statement_report(db, user_id)
-    if success_data is None:
-        raise HTTPException(status_code=404, detail="Bank statement not found for this user")
-    
-    return {
-        "status": "success",
-        "data": success_data
-    }
-
-@bsa_router.get("/consolidate-month-wise-overview")
 async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None)):
     db = request.app.state.mongo_db

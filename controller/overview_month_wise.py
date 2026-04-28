@@ -29,7 +29,7 @@ def _safe_decimal(val: Any) -> Decimal:
 def _compute_report(monthly_rows: list) -> dict:
     """All aggregation done in Python from pre-aggregated monthly rows."""
 
-    sum_credit = sum(_safe_decimal(r.get("TotalCredit", 0)) for r in monthly_rows)
+    sum_credit = sum(_safe_decimal(r.get("totalCredit", 0)) for r in monthly_rows)
     cnt_credit = sum(_safe_decimal(r.get("TotalCreditNo", 0)) for r in monthly_rows)
     sum_debit  = sum(_safe_decimal(r.get("TotalDebit", 0)) for r in monthly_rows)
     cnt_debit  = sum(_safe_decimal(r.get("TotalDebitNo", 0)) for r in monthly_rows)
@@ -74,21 +74,21 @@ def _compute_report(monthly_rows: list) -> dict:
             "total_debit_nos":      float(cnt_debit),
         },
         "cash_inflow": {
-            "total_credits_A":                float(round(sum_credit, 2)),
-            "outward_cheque_return_B":         float(round(val_outward_chq_ret_cr, 2)),
-            "reversal_inward_cheque_return_C": float(round(val_inward_chq_ret_cr, 2)),
-            "reversal_online_return_D":        float(round(val_inward_online_ret_cr, 2)),
-            "gross_credits_E":                 float(round(gross_credits, 2)),
+            "total_credits_a":                float(round(sum_credit, 2)),
+            "outward_cheque_return_b":         float(round(val_outward_chq_ret_cr, 2)),
+            "reversal_inward_cheque_return_c": float(round(val_inward_chq_ret_cr, 2)),
+            "reversal_online_return_d":        float(round(val_inward_online_ret_cr, 2)),
+            "gross_credits_e":                 float(round(gross_credits, 2)),
         },
         "cash_outflow": {
-            "total_debits_A":                   float(round(sum_debit, 2)),
-            "inward_cheque_return_B":            float(round(val_inward_chq_ret_dr, 2)),
-            "reversal_outward_cheque_return_C":  float(round(val_outward_chq_ret_dr, 2)),
-            "online_return_D":                   float(round(val_outward_online_ret_dr, 2)),
-            "gross_debits_E":                    float(round(gross_debits, 2)),
-            "contra_F":                          float(round(val_contra_dr, 2)),
-            "net_debits_G":                      float(round(net_debits_g, 2)),
-            "inhouse_debit_H":                   float(round(val_inhouse_dr, 2)),
+            "total_debits_a":                   float(round(sum_debit, 2)),
+            "inward_cheque_return_b":            float(round(val_inward_chq_ret_dr, 2)),
+            "reversal_outward_cheque_return_c":  float(round(val_outward_chq_ret_dr, 2)),
+            "online_return_d":                   float(round(val_outward_online_ret_dr, 2)),
+            "gross_debits_e":                    float(round(gross_debits, 2)),
+            "contra_f":                          float(round(val_contra_dr, 2)),
+            "net_debits_g":                      float(round(net_debits_g, 2)),
+            "inhouse_debit_h":                   float(round(val_inhouse_dr, 2)),
             "net_cash_outflow":                  float(round(net_cash_outflow, 2)),
         },
         "returns": {
@@ -114,7 +114,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     raw_debug = await db.bsa_merged_bankstatements.find_one({"user_id": str(user_id)})
     print(f"DEBUG: Raw document found: {raw_debug is not None}")
     
-    # ✅ ONE DB call — fetch only what we need
+    # ONE DB call — fetch only what we need
     doc = await db.bsa_merged_bankstatements.find_one(
         {"user_id": str(user_id)},
         projection={
@@ -140,7 +140,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
             detail={"message": "No monthly overview data found"}
         )
 
-    # ✅ Date filter in Python — zero DB cost
+    # Date filter in Python
     if from_date or to_date:
         from datetime import datetime
 
@@ -155,7 +155,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
             if (from_dt is None or parse_month(r["Month"]) >= from_dt)
             and (to_dt is None or parse_month(r["Month"]) <= to_dt)
         ]
-
+        print(monthly_rows)
         if not monthly_rows:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -164,7 +164,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
 
     
     
-    # ✅ All math in Python
+    #  All math in Python
     consolidated = _compute_report(monthly_rows)
     # consolidated.update({
     #     "reference_id": doc.get("merged_reference_id",[]),
@@ -179,7 +179,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     logger.info("bank_statement_report.success | user_id=%s | duration_ms=%.2f", user_id, elapsed_ms)
 
     return {
-        "Consolidated_OverAll_Report": consolidated,
+        "consolidated_overall_report": consolidated,
         "monthly_breakdown": cleaned_rows,
     }
 
