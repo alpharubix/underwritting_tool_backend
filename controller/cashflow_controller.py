@@ -81,7 +81,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     }
 
     # Sort by created_at to ensure consistent latest-wins logic
-    cursor = db["bankstatementreport"].find(query).sort("created_at", 1)
+    cursor = db["bsa_merged_bankstatements"].find(query).sort("created_at", 1)
     docs = await cursor.to_list(length=None)
 
     if not docs:
