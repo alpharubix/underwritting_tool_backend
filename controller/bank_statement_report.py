@@ -592,7 +592,7 @@ async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
 
         if not doc:
 
-            return JSONResponse(status_code=status.HTTP_404_NOT_FOUND,content={"message":"No date range found for this user"})
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={"message":"No date range found for this user"})
 
         from_date = doc.get("from_date")
         to_date = doc.get("to_date")
@@ -601,7 +601,7 @@ async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
             from_date = from_date.isoformat().split("T")[0]
 
         if to_date:
-            to_date = to_date.isoformat().split("T")[0]  # ✅ was mistakenly assigned to from_date
+            to_date = to_date.isoformat().split("T")[0]
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -612,6 +612,8 @@ async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
                 }
             }
         )
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print("Error happend at get_report_date_range controller",e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error"})

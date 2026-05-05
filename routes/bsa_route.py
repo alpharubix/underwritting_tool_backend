@@ -121,10 +121,10 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         )
         return {"status": "success", "message": "Report ingestion started"}
 
-    elif merge_status == "OVERLAP":
-        # Overlapping date range — reject, don't store
-        print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
-        return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
+    # elif merge_status == "OVERLAP":
+    #     # Overlapping date range — reject, don't store
+    #     print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
+    #     return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
 
     else:  # ERROR
         print(f"ERROR: Could not determine merge status for user {user_id}")

@@ -1,3 +1,4 @@
+from datetime import datetime
 import httpx
 from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -44,42 +45,29 @@ async def handle_bsa_upload(user_id,mongodb_connection:AsyncIOMotorDatabase, fil
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail={"message":f"Only PDF files are allowed. Invalid files: {', '.join(invalid_files)}"}
             )
-        #once after all the input data and pdf validation is done pass the pdf for consecutive check
-        pdf_lists = []
-        for file in files:
-            pdf_lists.append(await file.read())  # convert file object to bytes
 
-        is_pdf_consecutive = await is_pdf_are_consecutive(pdf_list=pdf_lists)
 
-        if is_pdf_consecutive.get("is_consecutive"):
+        #__append user_id to the request for request tracking
+        data_params['userapplicationid'] = user_id
 
-            #__append user_id to the request for request tracking
-            data_params['userapplicationid'] = user_id
+        # ── Forward to ScoreMe
 
-            # ── Forward to ScoreMe
+        scoreme_response,request_initiated_time = await upload_to_scoreme(files, data_params)
 
-            scoreme_response,request_initiated_time = await upload_to_scoreme(files, data_params)
+        if scoreme_response:
+           # fetch the reference id and status from the dict
+           reference_id = scoreme_response.get("data").get("referenceId")
+           response_message = scoreme_response.get("responseMessage")
+           response_code = scoreme_response.get("responseCode")
 
-            if scoreme_response:
-               # fetch the reference id and status from the dict
-               reference_id = scoreme_response.get("data").get("referenceId")
-               response_message = scoreme_response.get("responseMessage")
-               response_code = scoreme_response.get("responseCode")
+           #create the bsa_ref document post successfull response from the scoreme server
+           await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
 
-               #create the bsa_ref document post successfull response from the scoreme server
-               await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
+           #create a background task to store the input bsa files to the storage object
+           BackgroundTask.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
 
-               #create a background task to store the input bsa files to the storage object
-               BackgroundTask.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
-
-            #return back the accepted message back to the clinet for every successfull uploads
-            return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the report got"
-                                                                                        " generated"})
-        else:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Transactions are not consecutive","missing_months":is_pdf_consecutive.get('missing_months'),"missing_months_count":is_pdf_consecutive.get('total_missing')})
-
-    except HTTPException as e: #caught the http exceptions raised at upload_to_scoreme
-        raise e
+        #return back the accepted message back to the clinet for every successfull uploads
+        return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the report got generated"})
     except Exception as e:
         print("Error has been raised in bsa controller", e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message":"Internal server error please contact the admin for support."})
@@ -111,7 +99,7 @@ async def bank_names():
 
 
 
-async def is_pdf_are_consecutive(pdf_list):
+async def is_pdf_are_consecutive(pdf_list,from_date:datetime,to_date:datetime):
     try:
         MODEL_ID = os.getenv("MODEL_ID")
         # Only run this block for Gemini Developer API
@@ -128,7 +116,7 @@ async def is_pdf_are_consecutive(pdf_list):
                 }
             })
 
-        ANALYSIS_PROMPT = get_pdf_analysis_prompt()
+        ANALYSIS_PROMPT = get_pdf_analysis_prompt(current_from=from_date,current_to=to_date)
         # Add the analysis prompt at the end
         content_parts.append(ANALYSIS_PROMPT)
 
