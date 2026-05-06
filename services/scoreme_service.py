@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime, timezone
-
 import httpx
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.exceptions import HTTPException
@@ -31,6 +30,8 @@ async def upload_to_scoreme(files, data_params):
             )
             print("Response from ScoreMe API:",response.text)
             result = response.json() #this never breaks because of scoreme proper json formated response for all the errors
+
+            print("scoreme result",result)
 
             raise_bsa_exception(result)  #Http exception will be raised here if any error code matches
 

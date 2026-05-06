@@ -57,7 +57,7 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
                 {
                     "$set": {
                         "user_id": user_id,
-                        "last_merged_reference_id": reference_id,  # ✅ always update to latest
+                        "last_merged_reference_id": reference_id,  # always update to latest
                         "from_date": from_date,
                         "to_date": to_date,
                         "account_details": account_details,
@@ -68,10 +68,10 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
                         "status": "ACTIVE",
                     },
                     "$addToSet": {
-                        "merged_reference_id": reference_id  # ✅ appends, no duplicates
+                        "merged_reference_id": reference_id  # appends, no duplicates
                     },
                     "$setOnInsert": {
-                        # ✅ created_at only set once when document is first created
+                        # created_at only set once when document is first created
                         "created_at": datetime.now(timezone.utc),
                     }
                 },
@@ -94,7 +94,7 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
 
         else:
             print(f"FAILED: ScoreMe status {response.status_code}")
-            # ✅ Fixed — filter was missing before
+            # Fixed — filter was missing before
             await db['bsa_reference'].update_one(
                 {"reference_id": reference_id},
                 {
@@ -140,32 +140,32 @@ async def is_reference_id_mergable(user_id: str, reference_id: str, json_url: st
             print(f"FAILED: ScoreMe returned status {response.status_code}")
             return "ERROR"
 
-        raw_json = response.json()
-        period_str = raw_json.get("Data", {}).get("Account Details", {}).get("Period", "")
+        # raw_json = response.json()
+        # period_str = raw_json.get("Data", {}).get("Account Details", {}).get("Period", "")
+        #
+        # if " to " not in period_str:
+        #     print(f"WARN: Could not parse period string: '{period_str}'")
+        #     return "ERROR"
+        #
+        # parts = period_str.split(" to ")
+        # new_from = datetime.strptime(parts[0].strip(), "%d-%m-%Y")
+        # new_to = datetime.strptime(parts[1].strip(), "%d-%m-%Y")
+        #
+        # is_overlapping = (new_from <= existing_to) and (existing_from <= new_to)
+        #
+        # if is_overlapping:
+        #     print(
+        #         f"OVERLAP DETECTED for user {user_id}: "
+        #         f"existing [{existing_from.date()} → {existing_to.date()}] "
+        #         f"vs new [{new_from.date()} → {new_to.date()}]"
+        #     )
+        #     return "OVERLAP"
 
-        if " to " not in period_str:
-            print(f"WARN: Could not parse period string: '{period_str}'")
-            return "ERROR"
-
-        parts = period_str.split(" to ")
-        new_from = datetime.strptime(parts[0].strip(), "%d-%m-%Y")
-        new_to = datetime.strptime(parts[1].strip(), "%d-%m-%Y")
-
-        is_overlapping = (new_from <= existing_to) and (existing_from <= new_to)
-
-        if is_overlapping:
-            print(
-                f"OVERLAP DETECTED for user {user_id}: "
-                f"existing [{existing_from.date()} → {existing_to.date()}] "
-                f"vs new [{new_from.date()} → {new_to.date()}]"
-            )
-            return "OVERLAP"
-
-        print(
-            f"NO OVERLAP for user {user_id}: "
-            f"existing [{existing_from.date()} → {existing_to.date()}] "
-            f"vs new [{new_from.date()} → {new_to.date()}] — safe to merge"
-        )
+        # print(
+        #     f"NO OVERLAP for user {user_id}: "
+        #     f"existing [{existing_from.date()} → {existing_to.date()}] "
+        #     f"vs new [{new_from.date()} → {new_to.date()}] — safe to merge"
+        # )
         return "MERGABLE"
 
     except Exception as e:
@@ -191,7 +191,7 @@ async def merge_reference_ids(
                 "clientId": os.getenv("CLIENT_ID"),
                 "clientSecret": os.getenv("CLIENT_SECRET")
             },
-            json=reference_ids
+            json={"referenceIds": reference_ids}
         )
 
     if response.status_code != 200:

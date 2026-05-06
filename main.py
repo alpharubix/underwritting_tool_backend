@@ -1,6 +1,7 @@
 import logging
-import asyncio
 from contextlib import asynccontextmanager
+
+from starlette.middleware.cors import CORSMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,6 +37,13 @@ async def connect_to_databases(app: FastAPI): #database first approch
 
 
 app = FastAPI(lifespan=connect_to_databases)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.middleware("http")(authorization)
 app.include_router(auth_router)
 app.include_router(user_router)

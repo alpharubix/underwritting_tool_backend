@@ -6,12 +6,13 @@ from fastapi import APIRouter, UploadFile, File, Request, Form
 from controller.bsa_uploads import handle_bsa_upload,bank_names
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
-from controller.bank_statement_report import bank_statement_report,get_crm_bank_statement_report
+from controller.bank_statement_report import bank_statement_report, get_crm_bank_statement_report, get_report_date_range
 from typing import List, Optional
 from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_reference_id_mergable, merge_reference_ids
 from controller.backgroud_task_controller import send_report_mail_based_on_request
 from controller.bsa_summary_drcr_monthwise import bsa_summary_of_debit_credit_monthwise
 from controller.cashflow_controller import build_cashflow_report
+from controller.overview_month_wise import bank_statement_report_consolidated
 import json
 from datetime import datetime
 
@@ -32,7 +33,6 @@ async def upload_bsa(
 
         data_params = json.loads(data)
 
-        # Pull the account number from the metadata we just parsed
         response = await handle_bsa_upload(request.state.user_id,request.app.state.mongo_db,files,data_params,background_tasks)
     except JSONDecodeError:
         raise HTTPException(
@@ -121,10 +121,10 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         )
         return {"status": "success", "message": "Report ingestion started"}
 
-    elif merge_status == "OVERLAP":
-        # ✅ Overlapping date range — reject, don't store
-        print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
-        return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
+    # elif merge_status == "OVERLAP":
+    #     # Overlapping date range — reject, don't store
+    #     print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
+    #     return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
 
     else:  # ERROR
         print(f"ERROR: Could not determine merge status for user {user_id}")
@@ -132,10 +132,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
 
 
 @bsa_router.get("/month-wise-overview")
-async def bsa_report(request:Request):
+async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None)):
     db = request.app.state.mongo_db
     user_id = request.state.user_id
-    success_data = await bank_statement_report(db, user_id)
+    success_data = await bank_statement_report_consolidated(db, user_id,from_date,to_date)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     
@@ -275,3 +276,11 @@ async def bsa_get_bank_names():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": "Internal server error please contact the admin for support."}
         )
+
+@bsa_router.get("/report-date-range")
+async def report_date_range(
+    request: Request):
+    try:
+        return await get_report_date_range(user_id=request.state.user_id,db=request.app.state.mongo_db)
+    except HTTPException as e:
+       raise e

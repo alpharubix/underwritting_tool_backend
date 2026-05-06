@@ -84,6 +84,13 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                                 "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseRecipt", "0"]}}
                         ]
                     },
+                    "mw_inflow_val_breakdown": {
+                            "cash_deposit":    {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashdeposit", "0"]}},
+                            "cheque_receipt":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceipt", "0"]}},
+                            "online_receipt":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceipt", "0"]}},
+                            "other_receipt":   {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherRecipt", "0"]}},
+                            "inhouse_receipt": {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseRecipt", "0"]}},
+                    },
                     "mw_inflow_no": {
                         "$add": [
                             {"$toDouble": {
@@ -97,6 +104,13 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                             {"$toDouble": {
                                 "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseReciptNo", 0]}}
                         ]
+                    },
+                    "mw_inflow_no_breakdown": {
+                            "cash_deposit_no":    {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashdepositNo", "0"]}},
+                            "cheque_receipt_no":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequeReceiptNo", "0"]}},
+                            "online_receipt_no":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlineReceiptNo", "0"]}},
+                            "other_receipt_no":   {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherReciptNo", "0"]}},
+                            "inhouse_receipt_no": {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhouseReciptNo", "0"]}},
                     },
                     "mw_outflow_val": {
                         "$add": [
@@ -112,6 +126,13 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                                 "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePayment", "0"]}}
                         ]
                     },
+                    "mw_outflow_val_breakdown": {
+                            "cash_withdrawal":    {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDraw", "0"]}},
+                            "cheque_payment":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequePayment", "0"]}},
+                            "online_payment":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlinePayment", "0"]}},
+                            "other_payment":   {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherPayment", "0"]}},
+                            "inhouse_payment": {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePayment", "0"]}},
+                    },
                     "mw_outflow_no": {
                         "$add": [
                             {"$toDouble": {
@@ -125,7 +146,14 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                             {"$toDouble": {
                                 "$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePaymentNo", 0]}}
                         ]
-                    }
+                    },
+                    "mw_outflow_no_breakdown": {
+                            "cash_withdrawal_no":    {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.cashwithDrawNo", "0"]}},
+                            "cheque_payment_no":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.chequePaymentNo", "0"]}},
+                            "online_payment_no":  {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.onlinePaymentNo", "0"]}},
+                            "other_payment_no":   {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.otherPaymentNo", "0"]}},
+                            "inhouse_payment_no": {"$toDouble": {"$ifNull": ["$analysis_metadata.Data.Summary Of Debit And Credit.inhousePaymentNo", "0"]}},
+                    },
                 }
             },
 
@@ -146,13 +174,40 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                             "total_Inflows_VALUE": "$mw_inflow_val",
                             "total_Inflows_NO": "$mw_inflow_no",
                             "total_Outflows_VALUE": "$mw_outflow_val",
-                            "total_Outflows_NO": "$mw_outflow_no"
+                            "total_Outflows_NO": "$mw_outflow_no",
+                            "inflows_value_breakdown": "$mw_inflow_val_breakdown",
+                            "inflows_no_breakdown": "$mw_inflow_no_breakdown",
+                            "outflows_value_breakdown": "$mw_outflow_val_breakdown",
+                            "outflows_no_breakdown": "$mw_outflow_no_breakdown",
                         }
                     },
                     "total_Inflows_VALUE": {"$sum": "$mw_inflow_val"},
                     "total_Inflows_NO": {"$sum": "$mw_inflow_no"},
                     "total_Outflows_VALUE": {"$sum": "$mw_outflow_val"},
-                    "total_Outflows_NO": {"$sum": "$mw_outflow_no"}
+                    "total_Outflows_NO": {"$sum": "$mw_outflow_no"},
+                    "total_cash_deposit_val":    {"$sum": "$mw_inflow_val_breakdown.cash_deposit"},
+                    "total_cheque_receipt_val":  {"$sum": "$mw_inflow_val_breakdown.cheque_receipt"},
+                    "total_online_receipt_val":  {"$sum": "$mw_inflow_val_breakdown.online_receipt"},
+                    "total_other_receipt_val":   {"$sum": "$mw_inflow_val_breakdown.other_receipt"},
+                    "total_inhouse_receipt_val": {"$sum": "$mw_inflow_val_breakdown.inhouse_receipt"},
+
+                    "total_cash_deposit_no":    {"$sum": "$mw_inflow_no_breakdown.cash_deposit_no"},
+                    "total_cheque_receipt_no":  {"$sum": "$mw_inflow_no_breakdown.cheque_receipt_no"},
+                    "total_online_receipt_no":  {"$sum": "$mw_inflow_no_breakdown.online_receipt_no"},
+                    "total_other_receipt_no":   {"$sum": "$mw_inflow_no_breakdown.other_receipt_no"},
+                    "total_inhouse_receipt_no": {"$sum": "$mw_inflow_no_breakdown.inhouse_receipt_no"},
+
+                    "total_cash_withdraw_val":   {"$sum": "$mw_outflow_val_breakdown.cash_withdraw"},
+                    "total_cheque_payment_val":  {"$sum": "$mw_outflow_val_breakdown.cheque_payment"},
+                    "total_online_payment_val":  {"$sum": "$mw_outflow_val_breakdown.online_payment"},
+                    "total_other_payment_val":   {"$sum": "$mw_outflow_val_breakdown.other_payment"},
+                    "total_inhouse_payment_val": {"$sum": "$mw_outflow_val_breakdown.inhouse_payment"},
+
+                    "total_cash_withdraw_no":   {"$sum": "$mw_outflow_no_breakdown.cash_withdrawal_no"},
+                    "total_cheque_payment_no":  {"$sum": "$mw_outflow_no_breakdown.cheque_payment_no"},
+                    "total_online_payment_no":  {"$sum": "$mw_outflow_no_breakdown.online_payment_no"},
+                    "total_other_payment_no":   {"$sum": "$mw_outflow_no_breakdown.other_payment_no"},
+                    "total_inhouse_payment_no": {"$sum": "$mw_outflow_no_breakdown.inhouse_payment_no"},
                 }
             }
         ]
@@ -187,17 +242,21 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             formatted_breakdown.append({
                 "month": entry["month"].lower(),
                 "inflows_value": {
+                    "inflows_value_breakdown": entry.get("inflows_value_breakdown", {}),
                     "total_receipt_inflows_value": entry["total_Inflows_VALUE"]
                 },
                 "inflows_no": {
+                    "inflows_no_breakdown": entry.get("inflows_no_breakdown", {}),
                     "total_receipt_inflows_no": entry["total_Inflows_NO"]
                 },
                 "outflows_value": {
+                    "outflows_value_breakdown": entry.get("outflows_value_breakdown", {}),
                     "total_payments_outflows_value": entry["total_Outflows_VALUE"]
                 },
                 "outflows_no": {
+                    "outflows_no_breakdown": entry.get("outflows_no_breakdown", {}),
                     "total_payments_outflows_no": entry["total_Outflows_NO"]
-                }
+                },
             })
 
         formatted_response = {
@@ -207,7 +266,39 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                 "total_receipt_inflows_value":   raw["total_Inflows_VALUE"],
                 "total_receipt_inflows_no":      raw["total_Inflows_NO"],
                 "total_payments_outflows_value": raw["total_Outflows_VALUE"],
-                "total_payments_outflows_no":    raw["total_Outflows_NO"]
+                "total_payments_outflows_no":    raw["total_Outflows_NO"],
+
+                # Phase 2 — breakdown totals
+
+                "inflows_value_breakdown": {
+                    "cash_deposit":    raw["total_cash_deposit_val"],
+                    "cheque_receipt":  raw["total_cheque_receipt_val"],
+                    "online_receipt":  raw["total_online_receipt_val"],
+                    "other_receipt":   raw["total_other_receipt_val"],
+                    "inhouse_receipt": raw["total_inhouse_receipt_val"],
+                },
+                "inflows_no_breakdown": {
+                    "cash_deposit":    raw["total_cash_deposit_no"],
+                    "cheque_receipt":  raw["total_cheque_receipt_no"],
+                    "online_receipt":  raw["total_online_receipt_no"],
+                    "other_receipt":   raw["total_other_receipt_no"],
+                    "inhouse_receipt": raw["total_inhouse_receipt_no"],
+                },
+                "outflows_value_breakdown": {
+                    "cash_withdrawal":   raw["total_cash_withdraw_val"],
+                    "cheque_payment":  raw["total_cheque_payment_val"],
+                    "online_payment":  raw["total_online_payment_val"],
+                    "other_payment":   raw["total_other_payment_val"],
+                    "inhouse_payment": raw["total_inhouse_payment_val"],
+                },
+                "outflows_no_breakdown": {
+                    "cash_withdrawal_no":   raw["total_cash_withdraw_no"],
+                    "cheque_payment_no":  raw["total_cheque_payment_no"],
+                    "online_payment_no":  raw["total_online_payment_no"],
+                    "other_payment_no":   raw["total_other_payment_no"],
+                    "inhouse_payment_no": raw["total_inhouse_payment_no"],
+                },
+
             }
         }
 
