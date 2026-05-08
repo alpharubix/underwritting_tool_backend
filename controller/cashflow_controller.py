@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def parse_any_month(month_str: str) -> datetime | None:
     if not month_str:
         return None
-    
+
     month_str = month_str.strip()
 
     if len(month_str) >= 7 and month_str[4] == "-" and month_str[:4].isdigit():
@@ -25,19 +25,18 @@ def parse_any_month(month_str: str) -> datetime | None:
         except (ValueError, TypeError):
             pass
 
-    formats = ["%b-%Y", "%m-%Y", "%b %Y", "%B %Y"]
+    formats = ["%Y-%m", "%b-%Y", "%m-%Y", "%b %Y", "%B %Y"]
     for fmt in formats:
         try:
             return datetime.strptime(month_str, fmt)
         except (ValueError, TypeError):
             continue
-            
     return None
 
 def normalize_date_range(from_date: datetime, to_date: datetime):
-            normalized_from = from_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            normalized_to   = to_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            return normalized_from, normalized_to
+    normalized_from = from_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    normalized_to = to_date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return normalized_from, normalized_to
 
 def _safe_decimal(val: Any) -> Decimal:
     try:
@@ -54,6 +53,7 @@ def _safe_decimal(val: Any) -> Decimal:
 
 async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str):
     # 1. Input Validation
+    logger.info(f"Building cashflow report for user_id={user_id} from={from_month} to={to_month}")
     if not user_id or len(user_id.strip()) < 5:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     
@@ -67,6 +67,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         )
 
     from_dt, to_dt = normalize_date_range(from_dt_raw, to_dt_raw)
+    logger.debug(f"Normalized range: {from_dt} to {to_dt}")
     
     if from_dt > to_dt:
         raise HTTPException(status_code=400, detail="from_month cannot be after to_month")
@@ -74,7 +75,6 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     # 2. Fetch documents from MongoDB
     query_start = from_dt.replace(tzinfo=timezone.utc)
     query_end = (to_dt + relativedelta(months=1)).replace(tzinfo=timezone.utc)
-    print(query_start, query_end)
 
     query = {
         "user_id": user_id,
@@ -85,8 +85,10 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     # Sort by created_at to ensure consistent latest-wins logic
     cursor = db["bsa_merged_bankstatements"].find(query).sort("created_at", 1)
     docs = await cursor.to_list(length=None)
+    logger.info(f"Fetched {len(docs)} documents from MongoDB for user_id={user_id}")
 
     if not docs:
+        logger.warning(f"No documents found in DB for user_id={user_id} in range {from_dt} to {to_dt}")
         raise HTTPException(status_code=404, detail="No bank statements found for this range")
 
     # 3. Extract & Filter (Latest Upload Wins per month)
@@ -128,6 +130,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
             m_str = row.get("month") or row.get("Month") or row.get("MONTH") or row.get("MonthYear")
             row_dt_raw = parse_any_month(m_str)
             if not row_dt_raw:
+                logger.error(f"Failed to parse month string '{m_str}' in doc_id={doc.get('_id')}")
                 continue
 
             row_dt, _ = normalize_date_range(row_dt_raw, row_dt_raw)
@@ -210,6 +213,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
 
     for i, ym_key in enumerate(sorted_month_keys):
         row, _ = final_monthly_map[ym_key]
+        
         # Capture Boundaries: Opening balance of first month, Closing of last month
         if i == 0:
             totals["opening"] = _safe_decimal(row.get("OpeningBalance"))
@@ -314,11 +318,6 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
 
         formatted_data.append(row)
 
-    for data in formatted_data:  #safely convert strings to decimal for precision
-        for key, value in data.items():
-            if key !='MonthYear':
-                data[key] = _safe_decimal(data[key])
-
     # Formula Results
     gross_profit_c = totals["A_inflows"] - totals["B_outflows"]
     net_profit_f = gross_profit_c - totals["D_indirect_exp"] + totals["E_indirect_inc"]
@@ -330,26 +329,83 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         return float(d)
 
 
+    logger.info(
+        f"Report generated: {len(formatted_data)} months. "
+        f"Gross Profit: {gross_profit_c}, Net Profit: {net_profit_f}"
+    )
 
     # 5. Final Response
     return {
         "status": "success",
         "data":{
             "summary": {
-                "inflows_revenue_a": (totals["A_inflows"]),
-                "outflows_expenses_b": float(totals["B_outflows"]),
-                "gross_inflow_profit_c": float(gross_profit_c),
-                "indirect_expenses_d": float(totals["D_indirect_exp"]),
-                "indirect_income_e": float(totals["E_indirect_inc"]),
-                "net_inflow_profit_f": float(net_profit_f),
-                "total_payables": float(totals["payables"]),
-                "total_receivables_g": float(totals["receivables"]),
-                "bank_accruals": float(totals["accruals"]),
-                "opening_balance": float(totals["opening"]),
-                "closing_balance": float(totals["closing"]),
-                "net_cashflow": float(totals["A_inflows"] - totals["B_outflows"])
+                                # ── Phase 1: Top-level P&L ───────────────────────────────
+                "total_inflows_percent": f(total_inflows_pct),
+                "inflows_revenue_a":     f(totals["A_inflows"]),
+                "cash_deposit":          f(totals["cash_deposit"]),
+                "cheque_receipt":        f(totals["cheque_receipt"]),
+                "online_receipt":        f(totals["online_receipt"]),
+                "other_receipt":         f(totals["other_receipt"]),
+
+                "total_outflows_percent": f(total_outflows_pct),
+                "outflows_expenses_b":   f(totals["B_outflows"]),
+                "cash_withdrawal":          f(totals["cash_withdraw"]),
+                "cheque_payment":         f(totals["cheque_payment"]),
+                "online_payment":         f(totals["online_payment"]),
+                "other_payment":          f(totals["other_payment"]),
+
+                "gross_inflow_profit_c": f(gross_profit_c),
+
+
+                "indirect_expenses_d":   f(totals["D_indirect_exp"]),
+                 "salary_payment":        f(totals["salary_payment"]),
+                "insurance_payment":     f(totals["insurance_payment"]),
+                "rent_payment":          f(totals["rent_payment"]),
+                "company_expense":       f(totals["company_expense"]),
+                "bank_charge":           f(totals["bank_charge"]),
+                "utility_expense":       f(totals["utility_expense"]),
+                "tax_paid":              f(totals["tax_paid"]),
+                "interest_paid":         f(totals["interest_paid"]),
+                "refund_payment":        f(totals["refund_payment"]),
+                "credit_card_payment":   f(totals["credit_card_payment"]),
+                "forex_payment":         f(totals["forex_payment"]),
+ 
+                
+                "indirect_income_e":     f(totals["E_indirect_inc"]),
+                "interest_received":     f(totals["interest_received"]),
+                "tax_refund":            f(totals["tax_refund"]),
+                "rent_receipt":          f(totals["rent_receipt"]),
+
+                "net_inflow_profit_f":   f(net_profit_f),
+
+
+                "total_payables":        f(totals["payables"]),
+                "loan_payment":               f(totals["loan_payment"]),
+                "work_capital_payment":       f(totals["work_capital_payment"]),
+                "investment_payment":         f(totals["investment_payment"]),
+                "contra_payment":             f(totals["contra_payment"]),
+                "fi_payment":                 f(totals["fi_payment"]),
+                "sweep_out":                  f(totals["sweep_out"]),
+                "bank_instrument_payment":    f(totals["bank_instrument_payment"]),
+
+
+                "total_receivables_g":   f(totals["receivables"]),
+                "loan_receipt":          f(totals["loan_receipt"]),
+                "work_capital_receipt":  f(totals["work_capital_receipt"]),
+                "investment_receipt":    f(totals["investment_receipt"]),
+                "insurance_receipt":     f(totals["insurance_receipt"]),
+                "contra_receipt":        f(totals["contra_receipt"]),
+                "fi_receipt":            f(totals["fi_receipt"]),
+                "sweep_in":              f(totals["sweep_in"]),
+
+                "bank_accruals":         f(totals["accruals"]),
+                "opening_balance":       f(totals["opening"]),
+                "closing_balance":       f(totals["closing"]),
+                "net_cashflow":          f(gross_profit_c),
             },
             "monthly_breakdown": formatted_data,
+            
+        }  
 
         }
     }
