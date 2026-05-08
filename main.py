@@ -1,8 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
-
 from starlette.middleware.cors import CORSMiddleware
-
+import asyncio
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -19,6 +18,7 @@ from routes.auth_router import auth_router
 from routes.user_route import user_router
 from middleware.authorization_middleware import authorization
 from routes.bsa_route import bsa_router
+from controller.bsa_uploads import UploadHashMap
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,8 @@ async def connect_to_databases(app: FastAPI): #database first approch
         app.state.mongo_db  = mongo_db
         app.state.postgres_conn = postgres_conn
         print('database connected successfully')
+        upload_hashmap = UploadHashMap()
+        asyncio.create_task(upload_hashmap.clean_expired_entries())
         yield
     except Exception as e:
         print("Error connecting to databases",e)

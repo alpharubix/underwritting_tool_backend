@@ -53,6 +53,7 @@ def _safe_decimal(val: Any) -> Decimal:
 
 async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str):
     # 1. Input Validation
+    logger.info(f"Building cashflow report for user_id={user_id} from={from_month} to={to_month}")
     if not user_id or len(user_id.strip()) < 5:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     
@@ -66,6 +67,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         )
 
     from_dt, to_dt = normalize_date_range(from_dt_raw, to_dt_raw)
+    logger.debug(f"Normalized range: {from_dt} to {to_dt}")
     
     if from_dt > to_dt:
         raise HTTPException(status_code=400, detail="from_month cannot be after to_month")
@@ -81,10 +83,12 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     }
 
     # Sort by created_at to ensure consistent latest-wins logic
-    cursor = db["bankstatementreport"].find(query).sort("created_at", 1)
+    cursor = db["bsa_merged_bankstatements"].find(query).sort("created_at", 1)
     docs = await cursor.to_list(length=None)
+    logger.info(f"Fetched {len(docs)} documents from MongoDB for user_id={user_id}")
 
     if not docs:
+        logger.warning(f"No documents found in DB for user_id={user_id} in range {from_dt} to {to_dt}")
         raise HTTPException(status_code=404, detail="No bank statements found for this range")
 
     # 3. Extract & Filter (Latest Upload Wins per month)
@@ -126,6 +130,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
             m_str = row.get("month") or row.get("Month") or row.get("MONTH") or row.get("MonthYear")
             row_dt_raw = parse_any_month(m_str)
             if not row_dt_raw:
+                logger.error(f"Failed to parse month string '{m_str}' in doc_id={doc.get('_id')}")
                 continue
 
             row_dt, _ = normalize_date_range(row_dt_raw, row_dt_raw)
@@ -324,7 +329,10 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         return float(d)
 
 
-
+    logger.info(
+        f"Report generated: {len(formatted_data)} months. "
+        f"Gross Profit: {gross_profit_c}, Net Profit: {net_profit_f}"
+    )
     # 5. Final Response
     return {
         "status": "success",

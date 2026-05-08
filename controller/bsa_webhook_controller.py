@@ -112,7 +112,12 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
 
 
 
-async def is_reference_id_mergable(user_id: str, reference_id: str, json_url: str, mongodb_connection: AsyncIOMotorClient):
+async def is_reference_id_mergable(
+    user_id: str,
+    reference_id: str,
+    json_url: str,
+    mongodb_connection: AsyncIOMotorClient
+):
     try:
         doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
             {"user_id": user_id, "status": "ACTIVE"},
@@ -120,52 +125,8 @@ async def is_reference_id_mergable(user_id: str, reference_id: str, json_url: st
         )
 
         if not doc:
-            # No existing report — first time, store directly
             return "NO_EXISTING_DOC"
 
-        existing_from = doc.get("from_date")
-        existing_to = doc.get("to_date")
-
-        if not existing_from or not existing_to:
-            print(f"WARN: Existing doc missing from_date/to_date for user {user_id}")
-            return "NO_EXISTING_DOC"
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(json_url, timeout=60.0, headers={
-                "clientId": os.getenv("CLIENT_ID"),
-                "clientSecret": os.getenv("CLIENT_SECRET")
-            })
-
-        if response.status_code != 200:
-            print(f"FAILED: ScoreMe returned status {response.status_code}")
-            return "ERROR"
-
-        # raw_json = response.json()
-        # period_str = raw_json.get("Data", {}).get("Account Details", {}).get("Period", "")
-        #
-        # if " to " not in period_str:
-        #     print(f"WARN: Could not parse period string: '{period_str}'")
-        #     return "ERROR"
-        #
-        # parts = period_str.split(" to ")
-        # new_from = datetime.strptime(parts[0].strip(), "%d-%m-%Y")
-        # new_to = datetime.strptime(parts[1].strip(), "%d-%m-%Y")
-        #
-        # is_overlapping = (new_from <= existing_to) and (existing_from <= new_to)
-        #
-        # if is_overlapping:
-        #     print(
-        #         f"OVERLAP DETECTED for user {user_id}: "
-        #         f"existing [{existing_from.date()} → {existing_to.date()}] "
-        #         f"vs new [{new_from.date()} → {new_to.date()}]"
-        #     )
-        #     return "OVERLAP"
-
-        # print(
-        #     f"NO OVERLAP for user {user_id}: "
-        #     f"existing [{existing_from.date()} → {existing_to.date()}] "
-        #     f"vs new [{new_from.date()} → {new_to.date()}] — safe to merge"
-        # )
         return "MERGABLE"
 
     except Exception as e:

@@ -3,7 +3,7 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-from controller.bsa_uploads import handle_bsa_upload,bank_names
+from controller.bsa_uploads import  bank_names, pdf_date_parser,pdf_upload_consumer
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
 from controller.bank_statement_report import bank_statement_report, get_crm_bank_statement_report, get_report_date_range
@@ -33,7 +33,7 @@ async def upload_bsa(
 
         data_params = json.loads(data)
 
-        response = await handle_bsa_upload(request.state.user_id,request.app.state.mongo_db,files,data_params,background_tasks)
+        response = await pdf_date_parser(files,data_params)
     except JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -44,6 +44,25 @@ async def upload_bsa(
     except Exception as e:
         raise e
     return response
+
+@bsa_router.post("/upload_ref_id")
+async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks):
+    try:
+          input_data = await request.json()
+
+          return await pdf_upload_consumer(input_body=input_data,user_id=request.state.user_id,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks)
+
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message":"Invalid JSON Input"}
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise e
+
+
 
 
 
@@ -120,11 +139,6 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
             request.app.state.mongo_db, request.app.state.postgres_conn,
         )
         return {"status": "success", "message": "Report ingestion started"}
-
-    # elif merge_status == "OVERLAP":
-    #     # Overlapping date range — reject, don't store
-    #     print(f"REJECTED: Overlapping date range for user {user_id}, reference_id {reference_id}")
-    #     return {"status": "failure", "message": "Report rejected — overlapping date range with existing report"}
 
     else:  # ERROR
         print(f"ERROR: Could not determine merge status for user {user_id}")

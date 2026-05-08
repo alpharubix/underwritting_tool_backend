@@ -1,6 +1,5 @@
 from datetime import datetime
 
-
 def get_pdf_analysis_prompt(current_from: datetime, current_to: datetime):
     first_upload = current_from is None and current_to is None
     upload_context = (
@@ -59,3 +58,34 @@ Field rules:
 def _next_month(dt: datetime) -> datetime:
     from dateutil.relativedelta import relativedelta
     return dt + relativedelta(months=1)
+
+
+def get_pdf_date_range_parser_prompt():
+    prompt = """You are a financial document parser. You will be given one or more bank statement PDF files.
+
+Your task is to analyze each file and extract the **statement date range** (the starting and ending dates of the bank statement period).
+
+Return the result strictly as a JSON object in the following format:
+
+{
+  "data": {
+    "file1": {
+      "starting_date": "DD-MM-YYYY",
+      "ending_date": "DD-MM-YYYY"
+    },
+    "file2": {
+      "starting_date": "DD-MM-YYYY",
+      "ending_date": "DD-MM-YYYY"
+    }
+  }
+}
+
+Rules you MUST follow:
+1. Use the exact keys: "data", "starting_date", "ending_date".
+2. Name each file key as "file1", "file2", "file3", etc., in the order the files were provided.
+3. Dates must strictly follow the format DD-MM-YYYY.
+4. If a date cannot be found in a file, set its value to null.
+5. Do NOT include any explanation, markdown, code blocks, or extra text — output raw JSON only.
+6. Do NOT wrap the response in ```json``` or any other formatting."""
+
+    return prompt
