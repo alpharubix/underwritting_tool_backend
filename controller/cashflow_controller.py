@@ -333,6 +333,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         f"Report generated: {len(formatted_data)} months. "
         f"Gross Profit: {gross_profit_c}, Net Profit: {net_profit_f}"
     )
+
     # 5. Final Response
     return {
         "status": "success",
@@ -405,4 +406,6 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
             "monthly_breakdown": formatted_data,
             
         }  
+
+        }
     }
