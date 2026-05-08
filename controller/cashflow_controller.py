@@ -408,4 +408,3 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         }  
 
         }
-    }
