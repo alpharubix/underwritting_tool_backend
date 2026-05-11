@@ -7,6 +7,8 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from datetime import datetime
 
+from utils.scale_to_laksh import _scale_to_lakhs
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,37 +98,41 @@ def _compute_report(monthly_rows: list) -> dict:
     return {
         "overview": {
             # Convert both to float here
-            "average_credit_tranx": _safe_div(float(totals["TotalCredit"]), float(totals["TotalCreditNo"])),
+            "average_credit_tranx": _scale_to_lakhs(
+                totals["TotalCredit"] / totals["TotalCreditNo"] if totals["TotalCreditNo"] else Decimal("0")
+            ),
             "total_credit_nos":     float(totals["TotalCreditNo"]),
-            "average_debit_tranx":  _safe_div(float(totals["TotalDebit"]), float(totals["TotalDebitNo"])),
+            "average_debit_tranx":  _scale_to_lakhs(
+                totals["TotalDebit"] / totals["TotalDebitNo"] if totals["TotalDebitNo"] else Decimal("0")
+            ),
             "total_debit_nos":      float(totals["TotalDebitNo"]),
         },
         "cash_inflow": {
-            "total_credits_a":                float(round(totals["TotalCredit"], 2)),
-            "outward_cheque_return_b":         float(round(totals["OutwardChequeReturn"], 2)),
-            "reversal_inward_cheque_return_c": float(round(totals["ReversalOfInwardChequeReturn"], 2)),
-            "reversal_online_return_d":        float(round(totals["ReversalOfOnlineReturn"], 2)),
-            "gross_credits_e":                 float(round(gross_credits, 2)),
-            "contra_f":                         float(round(totals["Contra"], 2)),
-            "loan_received_g":                 float(round(totals["LoanReceived"] , 2)),
-            "net_credits_h":                   float(round(net_credits, 2)),
-            "inhouse_credit_i":                float(round(totals["InhouseCredit"], 2)),
-            "net_cash_inflow_j":               float(round(net_cash_inflow, 2)),
+            "total_credits_a":                _scale_to_lakhs(totals["TotalCredit"]),
+            "outward_cheque_return_b":         _scale_to_lakhs(totals["OutwardChequeReturn"]),
+            "reversal_inward_cheque_return_c": _scale_to_lakhs(totals["ReversalOfInwardChequeReturn"]),
+            "reversal_online_return_d":        _scale_to_lakhs(totals["ReversalOfOnlineReturn"]),
+            "gross_credits_e":                 _scale_to_lakhs(gross_credits),
+            "contra_f":                         _scale_to_lakhs(totals["Contra"]),
+            "loan_received_g":                 _scale_to_lakhs(totals["LoanReceived"]),
+            "net_credits_h":                   _scale_to_lakhs(net_credits),
+            "inhouse_credit_i":                _scale_to_lakhs(totals["InhouseCredit"]),
+            "net_cash_inflow_j":               _scale_to_lakhs(net_cash_inflow),
         },
         "cash_outflow": {
-            "total_debits_a":                   float(round(totals["TotalDebit"], 2)),
-            "inward_cheque_return_b":            float(round(totals["InwardChequeReturn"], 2)),
-            "reversal_outward_cheque_return_c":  float(round(totals["ReversalOfOutwardChequeReturn"], 2)),
-            "online_return_d":                   float(round(totals["OnlineReturn"], 2)),
-            "gross_debits_e":                    float(round(gross_debits, 2)),
-            "contra_f":                          float(round(totals["Contra"], 2)),
-            "net_debits_g":                      float(round(net_debits_g, 2)),
-            "inhouse_debit_h":                   float(round(totals["InhouseDebit"], 2)),
-            "net_cash_outflow":                  float(round(net_cash_outflow, 2)),
+            "total_debits_a":                   _scale_to_lakhs(totals["TotalDebit"]),
+            "inward_cheque_return_b":            _scale_to_lakhs(totals["InwardChequeReturn"]),
+            "reversal_outward_cheque_return_c":  _scale_to_lakhs(totals["ReversalOfOutwardChequeReturn"]),
+            "online_return_d":                   _scale_to_lakhs(totals["OnlineReturn"]),
+            "gross_debits_e":                    _scale_to_lakhs(gross_debits),
+            "contra_f":                          _scale_to_lakhs(totals["Contra"]),
+            "net_debits_g":                      _scale_to_lakhs(net_debits_g),
+            "inhouse_debit_h":                   _scale_to_lakhs(totals["InhouseDebit"]),
+            "net_cash_outflow":                  _scale_to_lakhs(net_cash_outflow),
 
         },
         "returns": {
-            "inward_cheque_return_nos":      float(totals[" InwardChequeReturnNos"]),
+            "inward_cheque_return_nos":      float(totals["InwardChequeReturnNos"]),
             "inward_cheque_return_percent":  _safe_div(float(totals["InwardChequeReturnNos"]), float(chq_received_sum_no), 100),
             "outward_cheque_return_nos":     float(totals["OutwardChequeReturnNos"]),
             "outward_cheque_return_percent": _safe_div(float(totals["OutwardChequeReturnNos"]), float(chq_paid_sum_no), 100),
@@ -142,8 +148,8 @@ def _compute_report(monthly_rows: list) -> dict:
             "inhouse_credit/total_percent": _safe_div(float(totals["InhouseCredit"]), float(totals["TotalCredit"]), 100),
             "inhouse_debit_nos": float(totals["InhouseDebitNos"]),
             "inhouse_debit/total_percent": _safe_div(float(totals["InhouseDebit"]), float(totals["TotalDebit"]), 100),
-            "average_eod": float(_safe_div(float(totals["SUM_AverageEod"]), num_months)),            
-            "od/cc_sanction_limit": float(_safe_div(float(totals["SUM_OdccLimit"]), num_months)),            
+            "average_eod":              _scale_to_lakhs(totals["SUM_AverageEod"] / Decimal(str(num_months))),            
+            "od_cc_sanction_limit":     _scale_to_lakhs(totals["SUM_OdccLimit"] / Decimal(str(num_months))),            
             "od/cc_drawing_power_limit": float(totals["OdccDrawingLimit"]),
             "average_od_&_cc_utilization_percent": _safe_div(float(totals["OdccDrawingLimit"]), float(totals["OdccLimit"]), 100),
             "no_of_days_limit_overdrawn": float(totals["NoOfDaysLimitOverdrawn"]),
@@ -151,12 +157,12 @@ def _compute_report(monthly_rows: list) -> dict:
             "overdrawn_amount_in_rs_mn_for_all_days": float(totals["OverdrawnAmountInRsMnForAllDays"]),
             "overdrawn_average_amount_in_rs_mn": float(totals["OverdrawnAverageAmountInRsMn"]),
             "overdrawn_average_as_percent_of_od/cc_limit": float(totals["OverdrawnAverageAsPercentOfOdccLimit"]),
-            "peak_overdrawing_amount": float(peak_val if peak_val != Decimal("-Infinity") else 0),            
+            "peak_overdrawing_amount":  _scale_to_lakhs(peak_val if peak_val != Decimal("-Infinity") else Decimal("0")),            
             "peak_overdrawing_date": peak_date,
-            "loan_repaid": float(totals["LoanRepaid"]),
-            "ecs_payment": float(totals["EcsPayment"]),
+            "loan_repaid":              _scale_to_lakhs(totals["LoanRepaid"]),
+            "ecs_payment":              _scale_to_lakhs(totals["EcsPayment"]),
             "no_of_unique_ecs/emis": float(totals["NoOfUniqueEcs"]),
-            "interest_paid": float(totals["InterestPaid"]),
+            "interest_paid":            _scale_to_lakhs(totals["InterestPaid"]),
         },
     }
 
