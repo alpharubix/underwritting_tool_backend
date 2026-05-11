@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import io
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -50,36 +51,59 @@ async def pdf_date_parser(files,data_params):
             )
 
 
-        #get the date range for the uploaded list of pdf
-        date_range = await upload_pdf_date_parser(files)
-
         #after getting the date range response from the ai agent generate the random uuid for that upload
 
         upload_ref_id = str(uuid.uuid4())
 
-        #push the data and upload_ref_id to the map
+        # Read file contents into memory (bytes are deepcopy-safe, UploadFile handles are not)
+        file_contents = []
+        for f in files:
+            content = await f.read()
+            file_contents.append({
+                "filename": f.filename,
+                "content_type": f.content_type,
+                "content": content
+            })
 
-        date_range['data']['files'] = files # append the files to the queue
+        #  Step 2: Pass fresh BytesIO copies to the date parser so it reads full content
+        files_for_parser = [
+            ReconstructedFile(
+                filename=fc["filename"],
+                content=fc["content"],
+                content_type=fc["content_type"]
+            )
+            for fc in file_contents
+        ]
 
-        date_range['data']['input_data'] = data_params # append the data-params to the queue
+        # get the date range for the uploaded list of pdf
+        date_range = await upload_pdf_date_parser(files_for_parser)
 
+        # Append files and input data to the date_range payload before storing
+        date_range['data']['files'] = file_contents
+        date_range['data']['input_data'] = data_params
+
+        # Store a deep copy in the upload map
         upload_map = UploadHashMap()
+        upload_map.insert_data_to_map(
+            upload_ref_id=upload_ref_id,
+            data=copy.deepcopy(date_range)
+        )
 
-        upload_map.insert_data_to_map(upload_ref_id=upload_ref_id,data=copy.deepcopy(date_range))
-
+        # Clean up the response payload before returning to client
         date_range['data'].pop('files')
-
         date_range['data'].pop('input_data')
 
-        # append the generated upload_ref_id into the response
+        # Append the generated upload_ref_id to the response
+        date_range['data']['upload_ref_id'] = upload_ref_id
 
-        date_range['data']["upload_ref_id"] = upload_ref_id
+        return JSONResponse(status_code=status.HTTP_200_OK, content=date_range)
 
-        return JSONResponse(status_code=status.HTTP_200_OK,content=date_range)
-
+    except HTTPException as e:
+        raise e  # Re-raise HTTP exceptions as-is so FastAPI handles them correctly
     except Exception as e:
         print("Error has been raised in bsa controller", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message":"Internal server error please contact the admin for support."})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message": "Internal server error please contact the admin for support."})
 
 
 
@@ -104,22 +128,31 @@ async def pdf_upload_consumer(user_id,input_body,mongodb_connection,background_t
         # if upload_ref_id found pass the file to the bsa handler
 
         # ── Forward to ScoreMe
-        files = upload_data.get('data').get('files')
+        stored_files = upload_data.get('data').get('files')
         data_params = upload_data.get('data').get('input_data')
 
-        # scoreme_response,request_initiated_time = await upload_to_scoreme(files, data_params)
-        #
-        # if scoreme_response:
-        #    # fetch the reference id and status from the dict
-        #    reference_id = scoreme_response.get("data").get("referenceId")
-        #    response_message = scoreme_response.get("responseMessage")
-        #    response_code = scoreme_response.get("responseCode")
-        #
-        #    #create the bsa_ref document post successfull response from the scoreme server
-        #    await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
-        #
-        #    #create a background task to store the input bsa files to the storage object
-        #    background_task.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
+        files = [
+            ReconstructedFile(
+                filename=f["filename"],
+                content=f["content"],
+                content_type=f.get("content_type", "application/pdf")
+            )
+            for f in stored_files
+        ]
+
+        scoreme_response,request_initiated_time = await upload_to_scoreme(files, data_params)
+
+        if scoreme_response:
+           # fetch the reference id and status from the dict
+           reference_id = scoreme_response.get("data").get("referenceId")
+           response_message = scoreme_response.get("responseMessage")
+           response_code = scoreme_response.get("responseCode")
+
+           #create the bsa_ref document post successfull response from the scoreme server
+           await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
+
+           #create a background task to store the input bsa files to the storage object
+           background_task.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)
 
         #return back the accepted message back to the clinet for every successfull uploads
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED,content={"message":"File is under processing we will let you know in the mail once the report got generated"})
@@ -300,3 +333,16 @@ class UploadHashMap:
                 del self.__upload_hashmap__[key]
 
             await asyncio.sleep(30)
+
+class ReconstructedFile:
+    """Mimics FastAPI UploadFile so upload_to_scoreme works without changes."""
+    def __init__(self, filename: str, content: bytes, content_type: str):
+        self.filename = filename
+        self.content_type = content_type
+        self._stream = io.BytesIO(content)
+
+    async def read(self) -> bytes:
+        return self._stream.read()
+
+    async def seek(self, offset: int) -> None:
+        self._stream.seek(offset)
