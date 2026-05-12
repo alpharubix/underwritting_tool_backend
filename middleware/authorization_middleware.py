@@ -17,6 +17,7 @@ async def authorization(request: Request, call_next):
         r"^/v1/auth/forgot_password$",
         r"^/v1/auth/validate-otp$",
         r"^/v1/auth/reset_password$",
+        r"^/v1/bsa/webhook-response-handlerr$"
         r"^/docs$",
         r"^/openapi.json$",
     ]
