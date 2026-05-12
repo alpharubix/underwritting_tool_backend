@@ -1,5 +1,8 @@
 import logging
+import os
 from contextlib import asynccontextmanager
+
+import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
 logging.basicConfig(
@@ -54,9 +57,5 @@ app.include_router(bsa_router)
 
 
 if __name__ == "__main__":
-    run(
-        "main:app",
-        host="0.0.0.0",
-        port=8080,
-        reload=True,
-    )
+    port = int(os.getenv("PORT", 8080))
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)
