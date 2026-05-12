@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 def get_pdf_analysis_prompt(current_from: datetime, current_to: datetime):
@@ -89,3 +90,20 @@ Rules you MUST follow:
 6. Do NOT wrap the response in ```json``` or any other formatting."""
 
     return prompt
+
+
+def format_private_key(key: str) -> str:
+    key = key.strip().strip('"').strip("'")
+
+    # Remove any accidental \n artifacts
+    key = key.replace('\\n', '').replace('\n', '')
+
+    # Strip headers if somehow partially present
+    key = key.replace('-----BEGIN PRIVATE KEY-----', '')
+    key = key.replace('-----END PRIVATE KEY-----', '')
+    key = re.sub(r'\s+', '', key)  # remove any remaining whitespace
+
+    # Rebuild proper PEM with 64-char line wrapping
+    body_lines = [key[i:i + 64] for i in range(0, len(key), 64)]
+
+    return "-----BEGIN PRIVATE KEY-----\n" + "\n".join(body_lines) + "\n-----END PRIVATE KEY-----\n"

@@ -3,11 +3,28 @@ import asyncio
 from datetime import datetime, timezone
 from google.cloud import storage
 from dotenv import load_dotenv
+from google.oauth2 import service_account
+
+from utils.bsa_upload_utility import format_private_key
+
 load_dotenv()
 import os
 
 try:
-    gcs_client = storage.Client()
+    credentials_info = {
+        "type": "service_account",
+        "project_id": os.getenv("PROJECT_ID"),
+        "private_key_id": os.getenv("PRIVATE_KEY_ID"),
+        "private_key": format_private_key(os.getenv("PRIVATE_KEY")),
+        "client_email": os.getenv("CLIENT_EMAIL"),
+        "client_id": os.getenv("GCP_CLIENT_ID"),
+        "token_uri": "https://oauth2.googleapis.com/token",  # hardcoded, never changes
+    }
+    raw_key = os.getenv("PRIVATE_KEY", "")
+
+
+    credentials = service_account.Credentials.from_service_account_info(credentials_info)
+    gcs_client = storage.Client(credentials=credentials, project=credentials_info["project_id"])
     bucket = gcs_client.bucket(os.getenv("GCS_BUCKET_NAME"))
 except Exception as e:
     print("Error raised during gcp bucket connection")
