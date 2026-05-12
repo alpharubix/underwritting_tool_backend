@@ -1,24 +1,23 @@
-# Base image
-FROM python:3.12-slim
 
-# Environment settings
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# Use official lightweight Python image
+FROM python:3.11-slim
+
+# Prevent .pyc files and enable unbuffered logs (important for Cloud Run)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Copy requirements file
+# Install dependencies first (better layer caching)
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all project files
+# Copy application code
 COPY . .
 
-# Expose FastAPI port
-EXPOSE 8000
+# Cloud Run injects PORT env var — default to 8080
+ENV PORT=8080
 
-# Run FastAPI app with Uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the app using uvicorn directly
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
