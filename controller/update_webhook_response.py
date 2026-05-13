@@ -4,7 +4,7 @@ from datetime import datetime, timezone
  
 
 
-async def update_webhook_response(user_id,payload,db):
+async def update_webhook_response(payload,db):
     try:
         datablock=payload.get("data",{})
         ref_Id=datablock.get("referenceId")
@@ -17,6 +17,7 @@ async def update_webhook_response(user_id,payload,db):
         if not existing_doc:
             print(f"Alert: referenceId {ref_Id} not found in database.")
             return {"success": False, "error": "Reference ID not found"}
+        user_id = existing_doc["user_id"]
         
         sample_payload_received=datetime.now(timezone.utc)
         print(sample_payload_received)
@@ -33,7 +34,7 @@ async def update_webhook_response(user_id,payload,db):
         }
         await db["bsa_reference"].update_one({"reference_id": ref_Id}, update_query)
         # print(update_query)
-        return {"success": True, "message": "Record updated successfully"}
+        return {"success": True, "message": "Record updated successfully","user_id": user_id}
     
     except Exception as e:
         print("Error has been raised in update_webhook_response controller", e)

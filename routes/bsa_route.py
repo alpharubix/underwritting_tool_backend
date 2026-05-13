@@ -72,14 +72,13 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         payload = await request.json()
         db = request.app.state.mongo_db
         mongodb_connection = request.app.state.mongo_db  # or however your raw client is accessed
-        user_id = request.state.user_id
         # Step 1: Update webhook response in DB
-        success = await update_webhook_response(user_id, payload, db)
+        success = await update_webhook_response(payload, db)
         if not success["success"]:
             raise HTTPException(status_code=400, detail=success["error"])
         json_url = payload.get("data", {}).get("jsonUrl")
         reference_id = payload.get("data", {}).get("referenceId")
-
+        user_id = success['user_id']
         if not json_url:
             print("ScoreMe API failure — no jsonUrl in payload")
             return {"status": "failure", "message": "ScoreMe API failure"}
