@@ -68,81 +68,87 @@ async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks):
 
 @bsa_router.post("/webhook-response-handler")
 async def webhook_response(request: Request, background_tasks: BackgroundTasks):
-    payload = await request.json()
-    db = request.app.state.mongo_db
-    mongodb_connection = request.app.state.mongo_db  # or however your raw client is accessed
-    user_id = request.state.user_id
-    # Step 1: Update webhook response in DB
-    success = await update_webhook_response(user_id, payload, db)
-    if not success["success"]:
-        raise HTTPException(status_code=400, detail=success["error"])
-    json_url = payload.get("data", {}).get("jsonUrl")
-    reference_id = payload.get("data", {}).get("referenceId")
+    try:
+        payload = await request.json()
+        db = request.app.state.mongo_db
+        mongodb_connection = request.app.state.mongo_db  # or however your raw client is accessed
+        user_id = request.state.user_id
+        # Step 1: Update webhook response in DB
+        success = await update_webhook_response(user_id, payload, db)
+        if not success["success"]:
+            raise HTTPException(status_code=400, detail=success["error"])
+        json_url = payload.get("data", {}).get("jsonUrl")
+        reference_id = payload.get("data", {}).get("referenceId")
 
-    if not json_url:
-        print("ScoreMe API failure — no jsonUrl in payload")
-        return {"status": "failure", "message": "ScoreMe API failure"}
+        if not json_url:
+            print("ScoreMe API failure — no jsonUrl in payload")
+            return {"status": "failure", "message": "ScoreMe API failure"}
 
-    if not reference_id:
-        print("No referenceId in payload")
-        raise HTTPException(status_code=400, detail="Missing referenceId in webhook payload")
+        if not reference_id:
+            print("No referenceId in payload")
+            raise HTTPException(status_code=400, detail="Missing referenceId in webhook payload")
 
-    # Step 2: Guard — if this reference_id is itself a merge result, store directly
-    # This prevents the infinite merge loop
-    ref_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id": reference_id})
-    if ref_doc and ref_doc.get("is_merge_request"):
-        print(f"reference_id {reference_id} is a merge result — storing directly")
-        background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-        background_tasks.add_task(
-            send_report_mail_based_on_request,
-            user_id,
-            reference_id,
-            request.app.state.mongo_db,
-            request.app.state.postgres_conn,
-        )
-        return {"status": "success", "message": "Merge result received — report ingestion started"}
+        # Step 2: Guard — if this reference_id is itself a merge result, store directly
+        # This prevents the infinite merge loop
+        ref_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id": reference_id})
+        if ref_doc and ref_doc.get("is_merge_request"):
+            print(f"reference_id {reference_id} is a merge result — storing directly")
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+            background_tasks.add_task(
+                send_report_mail_based_on_request,
+                user_id,
+                reference_id,
+                request.app.state.mongo_db,
+                request.app.state.postgres_conn,
+            )
+            return {"status": "success", "message": "Merge result received — report ingestion started"}
 
-    merge_status = await is_reference_id_mergable(
-        user_id=user_id,
-        reference_id=reference_id,
-        json_url=json_url,
-        mongodb_connection=mongodb_connection
-    )
-
-    if merge_status == "MERGABLE":
-        existing_doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
-            {"user_id": user_id, "status": "ACTIVE"},
-            sort=[("created_at", -1)]
+        merge_status = await is_reference_id_mergable(
+            user_id=user_id,
+            reference_id=reference_id,
+            json_url=json_url,
+            mongodb_connection=mongodb_connection
         )
 
-        if not existing_doc:
-            print(f"WARN: No existing doc found for user {user_id} — storing directly")
+        if merge_status == "MERGABLE":
+            existing_doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
+                {"user_id": user_id, "status": "ACTIVE"},
+                sort=[("created_at", -1)]
+            )
+
+            if not existing_doc:
+                print(f"WARN: No existing doc found for user {user_id} — storing directly")
+                background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+                background_tasks.add_task(
+                    send_report_mail_based_on_request, user_id, reference_id,
+                    request.app.state.mongo_db, request.app.state.postgres_conn,
+                )
+                return {"status": "success", "message": "Fallback — report ingestion started"}
+
+            existing_reference_id = existing_doc["last_merged_reference_id"]
+            print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
+            background_tasks.add_task(merge_reference_ids, user_id, [existing_reference_id, reference_id],
+                                      mongodb_connection)
+            return {"status": "success", "message": "Merge initiated"}
+
+        elif merge_status == "NO_EXISTING_DOC":
+            # First report for this user — store directly
+            print(f"First report for user {user_id} — storing directly")
             background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
             background_tasks.add_task(
                 send_report_mail_based_on_request, user_id, reference_id,
                 request.app.state.mongo_db, request.app.state.postgres_conn,
             )
-            return {"status": "success", "message": "Fallback — report ingestion started"}
+            return {"status": "success", "message": "Report ingestion started"}
 
-        existing_reference_id = existing_doc["last_merged_reference_id"]
-        print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
-        background_tasks.add_task(merge_reference_ids, user_id, [existing_reference_id, reference_id],
-                                  mongodb_connection)
-        return {"status": "success", "message": "Merge initiated"}
-
-    elif merge_status == "NO_EXISTING_DOC":
-        # First report for this user — store directly
-        print(f"First report for user {user_id} — storing directly")
-        background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-        background_tasks.add_task(
-            send_report_mail_based_on_request, user_id, reference_id,
-            request.app.state.mongo_db, request.app.state.postgres_conn,
-        )
-        return {"status": "success", "message": "Report ingestion started"}
-
-    else:  # ERROR
-        print(f"ERROR: Could not determine merge status for user {user_id}")
-        raise HTTPException(status_code=500, detail="Could not validate report date range")
+        else:  # ERROR
+            print(f"ERROR: Could not determine merge status for user {user_id}")
+            raise HTTPException(status_code=500, detail="Could not validate report date range")
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail={"message":"Invalid Json Body"})
+    except Exception as e:
+        print("Error raised at webhook reciever route",e)
+        raise HTTPException(status_code=400, detail={"message":"Internal server error"})
 
 
 @bsa_router.get("/month-wise-overview")
