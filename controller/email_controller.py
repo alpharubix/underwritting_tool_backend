@@ -26,7 +26,7 @@ def send_mail(to, subject, body):
     try:
         smtp = create_smtp_connection()
         msg = MIMEMultipart()
-        msg['From'] = "5pointcredit.com <techmgr@meramerchant.com>"
+        msg['From'] = "techmgr@meramerchant.com"
         msg['To'] = to
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'html'))
