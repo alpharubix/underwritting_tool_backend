@@ -22,17 +22,34 @@ def create_smtp_connection():
         return None
 
 
+# def send_mail(to, subject, body):
+#     try:
+#         resend.api_key = os.getenv("RESEND_API_KEY")
+#         msg = MIMEMultipart()
+#         msg['From'] = "techmgr@meramerchant.com"
+#         msg['To'] = to
+#         msg['Subject'] = subject
+#         msg.attach(MIMEText(body, 'html'))
+#         smtp.send_message(msg)
+#         smtp.quit()
+#         print(f"Email sent successfully to {to}")
+#     except Exception as e:
+#             print(f"Error sending email to {to}:", e)
+#             return None
+import resend
+import os
+
+resend.api_key = os.getenv("RESEND_API_KEY")
+
 def send_mail(to, subject, body):
     try:
-        smtp = create_smtp_connection()
-        msg = MIMEMultipart()
-        msg['From'] = "techmgr@meramerchant.com"
-        msg['To'] = to
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
-        smtp.send_message(msg)
-        smtp.quit()
-        print(f"Email sent successfully to {to}")
+        response = resend.Emails.send({
+            "from": "ashok.m@r1xchange.com",
+            "to": to,
+            "subject": subject,
+            "html": body
+        })
+        print(f"Email sent successfully to {to}, ID: {response['id']}")
     except Exception as e:
-            print(f"Error sending email to {to}:", e)
-            return None
+        print(f"Error sending email to {to}:", e)
+        return None

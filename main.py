@@ -16,11 +16,11 @@ logging.getLogger("pymongo").setLevel(logging.WARNING)
 
 from database.databse_config import get_mongo_db,get_postgres_conn
 from fastapi import FastAPI
-from uvicorn import run
 from routes.auth_router import auth_router
 from routes.user_route import user_router
 from middleware.authorization_middleware import authorization
 from routes.bsa_route import bsa_router
+from routes.webhook_router import webhook_router
 from controller.bsa_uploads import UploadHashMap
 
 
@@ -54,6 +54,7 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(bsa_router)
 
+app.include_router(webhook_router)
 
 
 if __name__ == "__main__":
