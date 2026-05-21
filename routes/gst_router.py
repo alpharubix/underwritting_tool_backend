@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 from starlette.requests import Request
 from controller.gst_contoller.gst_analyser_controller import get_gstin, update_gstin, get_gstin_basic_info, get_gst_otp, \
-    validate_gst_otp_info, send_gstin_to_score_me, gst_ref_id_status,get_all_user_ref_ids
+    validate_gst_otp_info, send_gstin_to_score_me, gst_ref_id_status, get_all_user_ref_ids, \
+    get_overview_and_account_details, get_top_suppliers_and_customers,get_monthly_sales_and_purchase_summary
 
 gst_router = APIRouter(prefix="/v1/gst", tags=["gst"])
 
@@ -63,3 +64,25 @@ async def get_user_ref_id(request: Request):
         return await get_all_user_ref_ids(request)
     except HTTPException as e:
         raise e
+
+@gst_router.post("/overview")
+async def overview(request: Request):
+    try:
+        return await get_overview_and_account_details(request)
+    except HTTPException as e:
+        raise e
+
+@gst_router.post("/top-suppliers-and-customers")
+async def top_suppliers_and_customers(request: Request):
+    try:
+        return await get_top_suppliers_and_customers(request)
+    except HTTPException as e:
+        raise e
+
+@gst_router.post("/monthly-sales-purchase-summary")
+async def monthly_sales_purchase_summary(request: Request):
+    try:
+        return await get_monthly_sales_and_purchase_summary(request)
+    except HTTPException as e:
+        raise e
+

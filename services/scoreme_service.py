@@ -2,7 +2,8 @@ import os
 import json
 from datetime import datetime, timezone
 import httpx
-from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
+from pymongo.results import UpdateResult
 from starlette.exceptions import HTTPException
 from starlette import status
 from custom_exceptions.bsa_exceptions import raise_bsa_exception
@@ -99,3 +100,10 @@ async def create_bsa_ref_document(user_id, reference_id, input_data, bsa_request
     except Exception as e:
         print("Error occurred while creating a bsa reference document in create_bsa_ref_document.",e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error please contact the admin for support."})
+
+async def update_document(
+    collection: AsyncIOMotorCollection,
+    filter: dict,
+    fields: dict,
+) -> UpdateResult:
+    return await collection.update_one(filter, {"$set": fields})

@@ -4,6 +4,9 @@ import os
 import re
 import uuid
 from datetime import datetime, timezone
+from json import JSONDecodeError
+
+import httpx
 from bson import ObjectId
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorCollection,AsyncIOMotorDatabase
@@ -14,6 +17,7 @@ from httpx import HTTPError
 from config import config
 from custom_exceptions.bsa_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
     raise_gst_validate_otp_exception, raise_gst_post_gstin_exception
+from services.scoreme_service import update_document
 
 logger = logging.getLogger(__name__)
 
@@ -457,7 +461,6 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
                 "webhook_status":"PENDING",
                 "webhook_received_time":None,
                 "webhook_response_code":None,
-                "webhook_reesponse_message":None,
                 "gst_report_url":None,
                 "is_consumed":False,
                 "consumed_at":None,
@@ -484,7 +487,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
-async def gst_ref_id_status(request: Request):
+async def gst_ref_id_status(request: Request)->JSONResponse:
     try:
         try:
             input_data = await request.json()
@@ -519,7 +522,7 @@ async def gst_ref_id_status(request: Request):
 
 
 
-async def get_all_user_ref_ids(request: Request):
+async def get_all_user_ref_ids(request: Request)->JSONResponse:
     try:
         user_id = request.state.user_id
 
@@ -541,6 +544,232 @@ async def get_all_user_ref_ids(request: Request):
 
 
 
+
+async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)->JSONResponse:
+    try:
+        if webhook_data.get("responseCode") != "SRC001":
+            data = webhook_data.get("data") or {}
+            reference_id = data.get("referenceId")
+            await update_document(
+                collection=database["gst_reference"],
+                filter={"reference_id": reference_id},
+                fields={
+                    "gst_reference_id_status": "FAILED",
+                    "webhook_status": "RECEIVED",
+                    "webhook_received_time": datetime.now(timezone.utc),
+                    "webhook_response_code": webhook_data.get("responseCode"),
+                    "webhook_response_message": webhook_data.get("responseMessage"),
+                    "gst_report_url": data.get("reportUrl"),
+                },
+            )
+            return JSONResponse(status_code=200, content={"message": "Webhook acknowledged"})
+
+        data = webhook_data.get("data") or {}
+        reference_id = data.get("referenceId")
+        json_url = data.get("jsonUrl")
+
+        if not reference_id or not json_url:
+            raise HTTPException(status_code=400, detail={"message": "Reference id or json url is required"})
+
+        gst_ref_doc = await database["gst_reference"].find_one({"reference_id":reference_id},{"_id":0,"user_id":1})
+        user_id = gst_ref_doc.get("user_id") or {}
+
+        await update_document(
+            collection=database["gst_reference"],
+            filter={"reference_id": reference_id},
+            fields={
+                "gst_reference_id_status": "COMPLETED",
+                "webhook_status": "RECEIVED",
+                "webhook_received_time": datetime.now(timezone.utc),
+                "webhook_response_code": webhook_data.get("responseCode"),
+                "webhook_response_message": webhook_data.get("responseMessage"),
+                "gst_report_url": data.get("data"),
+            },
+        )
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            try:
+                response = await client.get(json_url, headers={
+                    "clientId": os.getenv("CLIENT_ID"),
+                    "clientSecret": os.getenv("CLIENT_SECRET"),
+                })
+                response.raise_for_status()
+
+            except HTTPError as e:
+                raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+        report_data = response.json().get("data") or {}
+
+        await database["gst_analyzed_reports"].insert_one({
+            "user_id": user_id,
+            "reference_id": reference_id,
+            "report": report_data,
+            "created_at": datetime.now(timezone.utc),
+        })
+
+        return JSONResponse(status_code=200, content={"message": "GST report successfully saved"})
+
+    except HTTPException as e:
+        logger.error("Error raised at webhook consumer controller", exc_info=True)
+        raise e
+    except HTTPError as e:
+        logger.error("HTTP error in gst_webhook_consumer: %s", e, exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to fetch GST report")
+    except Exception:
+        logger.exception("Unexpected error in gst_webhook_consumer")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+async def get_overview_and_account_details(request:Request)->JSONResponse:
+
+    try:
+        input_data = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail={"message": "Invalid json format in body"})
+
+    if not input_data:
+        raise HTTPException(status_code=400, detail={"message": "Body cannot be empty"})
+
+    if not input_data.get('gst_reference_id'):
+        raise HTTPException(status_code=400, detail={"message": "Gst reference id cannot be empty"})
+
+
+    gst_report_coll:AsyncIOMotorCollection = request.app.state.mongo_db["gst_analyzed_report"]
+
+    projection = {
+        "_id": 0,
+        "reference_id": 1,
+        "report.Account Details":1,
+        "report.Overview":1,
+        "report.Snapshot.Averages":1
+        }
+
+    doc = await gst_report_coll.find_one(
+        {"reference_id": input_data.get('gst_reference_id')},
+        projection
+    )
+
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "No data found"}
+        )
+
+    overview = []
+
+    for i in range(0,len(doc['report'])):
+        if len(doc.get("report")[i])==0:
+            continue
+
+        if doc.get("report")[i].get("Snapshot"):
+            snapshot = doc["report"][i]["Snapshot"]
+            doc["report"][i]["Snapshot"] = [item for item in snapshot if item]
+
+        overview.append(doc.get("report")[i])
+
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "overview and averages fetched successfully",
+            "data": overview,
+        }
+    )
+async def get_top_suppliers_and_customers(request:Request)->JSONResponse:
+    try:
+        input_data = await request.json()
+    except JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail={"message": "Invalid json format in body"})
+
+    if not input_data:
+        raise HTTPException(status_code=400, detail={"message": "Body cannot be empty"})
+
+    if not input_data.get('gst_reference_id'):
+        raise HTTPException(status_code=400, detail={"message": "Gst reference id cannot be empty"})
+
+    projection = {
+        "_id": 0,
+        "report.Major Suppliers & Customers ":1
+    }
+
+    gst_analyzed_coll:AsyncIOMotorCollection = request.app.state.mongo_db["gst_analyzed_report"]
+
+    doc = await gst_analyzed_coll.find_one({"reference_id": input_data.get('gst_reference_id')},projection)
+
+    if not doc:
+        raise HTTPException(status_code=404, detail={"message": "No Analyzed Data Found"})
+
+    suppliers_and_customers = []
+
+    for i in range (0,len(doc['report'])):
+        if not doc['report'][i]:
+            continue
+        suppliers_and_customers.append(doc['report'][i])
+
+    return JSONResponse(status_code=200, content={"message":"Top 10 suppliers and customers fetched successfully","data": suppliers_and_customers})
+
+
+async def get_monthly_sales_and_purchase_summary(request: Request) -> JSONResponse:
+    try:
+        input_data = await request.json()
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Invalid json format in body"}
+        )
+
+    if not input_data:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Body cannot be empty"}
+        )
+
+    if not input_data.get("gst_reference_id"):
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Gst reference id cannot be empty"}
+        )
+
+    projection = {
+        "_id": 0,
+        "report.Monthly Sales&Purchase": 1,
+    }
+
+    gst_analyzed_coll: AsyncIOMotorCollection = request.app.state.mongo_db[
+        "gst_analyzed_report"
+    ]
+
+    doc = await gst_analyzed_coll.find_one(
+        {"reference_id": input_data.get("gst_reference_id")},
+        projection
+    )
+
+    if not doc:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "No Analyzed Data Found"}
+        )
+
+    monthly_sales_and_purchase_summary = []
+
+    for i in range(0, len(doc["report"])):
+
+        if not doc["report"][i]:
+            continue
+        monthly_sales_and_purchase_summary.append(
+                doc["report"][i]
+            )
+
+
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Monthly sales and purchase summary fetched successfully",
+            "data": {
+                "monthly_sales_and_purchase_summary": monthly_sales_and_purchase_summary,
+            }
+        }
+    )
 
 
 
