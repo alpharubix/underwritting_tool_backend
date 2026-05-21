@@ -5,7 +5,6 @@ import re
 import uuid
 from datetime import datetime, timezone
 from bson import ObjectId
-from celery.utils.text import str_to_list
 from fastapi import HTTPException
 from motor.motor_asyncio import AsyncIOMotorCollection,AsyncIOMotorDatabase
 from starlette.requests import Request
@@ -440,7 +439,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
         if scoreme_response_json.get("responseCode") == "SRS016":
 
             database:AsyncIOMotorDatabase = request.app.state.mongo_db
-            gst_reference_coll:AsyncIOMotorCollection = database["gst_reference_coll"]
+            gst_reference_coll:AsyncIOMotorCollection = database["gst_reference"]
 
             # if this blocks works that means the result is successfull
 
@@ -466,7 +465,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
 
             await gst_reference_coll.insert_one(gst_reference_doc)
 
-            return JSONResponse(status_code=200,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":scoreme_response_json.get("data").get("reference_id")}})
+            return JSONResponse(status_code=202,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":scoreme_response_json.get("data").get("reference_id")}})
 
         else:
             raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
@@ -484,6 +483,61 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
         logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
+
+async def gst_ref_id_status(request: Request):
+    try:
+        try:
+            input_data = await request.json()
+        except json.decoder.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})
+
+        if not input_data:
+            raise HTTPException(status_code=400, detail={"message": "Body cannot be empty"})
+
+        gst_ref_id = input_data.get("gst_ref_id", None)
+
+        if not gst_ref_id :
+            raise HTTPException(status_code=400, detail={"message": "At least one gst reference id is required"})
+
+        gst_reference_id_status = [] #stores the retrived  status from the db
+        gst_reference_coll : AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
+
+        for ref_id in gst_ref_id:
+            doc = await gst_reference_coll.find_one({"reference_id":ref_id},{"_id":0,"gst_reference_id_status":1})
+            if doc:
+                gst_reference_id_status.append({"gst_reference_id_status":doc["gst_reference_id_status"],"gst_reference_id":ref_id})
+
+        return JSONResponse(status_code=200,content={"message":"status fetch successfully","data":{"gst_reference_id_status":gst_reference_id_status}})
+
+    except HTTPException as e:
+        logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
+        raise e
+
+    except Exception as e:
+        logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
+
+
+async def get_all_user_ref_ids(request: Request):
+    try:
+        user_id = request.state.user_id
+
+        gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
+
+        docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1}).to_list(None)
+
+        if not docs:
+            raise HTTPException(status_code=404, detail={"message": "No reference id found for this user"})
+
+        return JSONResponse(status_code=200,content={"message":"Gst reference id list fetch success","data":docs})
+
+    except HTTPException as e:
+        logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
+        raise e
+    except Exception as e:
+        logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
 
