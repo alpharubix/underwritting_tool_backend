@@ -450,14 +450,14 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
             gst_reference_doc = {
                 "gstin": [gstin.upper()],
                 "user_id":request.state.user_id,
-                "reference_id":scoreme_response_json.get("data").get("reference_id"),
+                "reference_id":scoreme_response_json.get("data").get("referenceId"),
                 "input_data": input_data,
                 "from_month": from_month,
                 "to_month": to_month,
                 "gst_reference_id_status": "INPROGRESS",
                 "gst_request_status":scoreme_response_json.get("responseMessage"),
                 "gst_request_response_code":scoreme_response_json.get("responseCode"),
-                "gst_request_initiated_time":datetime.now(timezone.utc),
+                "gst_request_initiated_time":request_initiated_at,
                 "webhook_status":"PENDING",
                 "webhook_received_time":None,
                 "webhook_response_code":None,
@@ -688,6 +688,7 @@ async def get_top_suppliers_and_customers(request:Request)->JSONResponse:
 
     projection = {
         "_id": 0,
+        "report.Account Details":1,
         "report.Major Suppliers & Customers ":1
     }
 
@@ -731,6 +732,7 @@ async def get_monthly_sales_and_purchase_summary(request: Request) -> JSONRespon
 
     projection = {
         "_id": 0,
+        "report.Account Details": 1,
         "report.Monthly Sales&Purchase": 1,
     }
 
