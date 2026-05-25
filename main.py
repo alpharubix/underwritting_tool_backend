@@ -22,6 +22,7 @@ from middleware.authorization_middleware import authorization
 from routes.bsa_route import bsa_router
 from routes.webhook_router import webhook_router
 from controller.bsa_uploads import UploadHashMap
+from routes.gst_router import gst_router
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ app.include_router(bsa_router)
 
 app.include_router(webhook_router)
 
+app.include_router(gst_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
