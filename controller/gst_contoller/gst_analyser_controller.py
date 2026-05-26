@@ -15,7 +15,7 @@ from starlette.responses import JSONResponse
 from httpx import AsyncClient
 from httpx import HTTPError
 from config import config
-from custom_exceptions.bsa_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
+from custom_exceptions.scoreme_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
     raise_gst_validate_otp_exception, raise_gst_post_gstin_exception
 from services.scoreme_service import update_document
 
