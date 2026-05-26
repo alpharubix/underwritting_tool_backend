@@ -19,6 +19,7 @@ async def authorization(request: Request, call_next):
         r"^/v1/auth/reset_password$",
         r"^/v1/bsa/webhook-response-handler$",
         r"^/webhook/gst-statements$",
+        r"^/webhook/itr-service$",
         r"^/docs$",
         r"^/openapi.json$",
     ]
