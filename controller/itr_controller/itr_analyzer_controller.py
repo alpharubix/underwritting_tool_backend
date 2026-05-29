@@ -152,7 +152,7 @@ async def is_itr_report_already_there(request:Request) -> JSONResponse:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
                           detail={"message": "Report already exists!", "data":{"is_proceed":False,"itr_reference_id":existing_report.get("reference_id"),"responseCode":None}})
         else:
-            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed","data":{"is_proceed":True,"itr_reference_id":existing_report.get("reference_id"),"responseCode":None}})
+            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed","data":{"is_proceed":True,"itr_reference_id":None,"responseCode":None}})
     except HTTPException as e:
         logging.error(msg=str(e), exc_info=True)
         print(f"Conflict might happen if we allow this user: {str(e)}")
