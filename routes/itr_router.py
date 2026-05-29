@@ -2,16 +2,16 @@ from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from controller.itr_controller.itr_analyzer_controller import is_itr_report_already_there, \
+from controller.itr_controller.itr_analyzer_controller import get_itr_link_status_based_on_user, \
     initiate_itr_process, get_link_status_based_on_ref_id, get_tax_calculation, get_balance_sheet, \
     get_profit_and_loss_statement, get_ratio_analysis
 
 itr_router = APIRouter(prefix="/v1/itr")
 
 
-@itr_router.get('/data-precheck')
+@itr_router.get('/link-precheck')
 async def itr_data_precheck(request: Request)->JSONResponse:
-    return await is_itr_report_already_there(request)
+    return await get_itr_link_status_based_on_user(request)
 
 @itr_router.post('/generate-link')
 async def generate_itr_link(request: Request)->JSONResponse:
