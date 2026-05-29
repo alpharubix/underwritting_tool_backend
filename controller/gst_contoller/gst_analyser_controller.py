@@ -445,7 +445,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
             database:AsyncIOMotorDatabase = request.app.state.mongo_db
             gst_reference_coll:AsyncIOMotorCollection = database["gst_reference"]
 
-            # if this blocks works that means the result is successfull
+            # if this blocks works that means the result is successfully
 
             gst_reference_doc = {
                 "gstin": [gstin.upper()],
@@ -468,7 +468,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
 
             await gst_reference_coll.insert_one(gst_reference_doc)
 
-            return JSONResponse(status_code=202,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":scoreme_response_json.get("data").get("reference_id")}})
+            return JSONResponse(status_code=202,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":scoreme_response_json.get("data").get("referenceId")}})
 
         else:
             raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
@@ -583,7 +583,7 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)-
                 "webhook_received_time": datetime.now(timezone.utc),
                 "webhook_response_code": webhook_data.get("responseCode"),
                 "webhook_response_message": webhook_data.get("responseMessage"),
-                "gst_report_url": data.get("data"),
+                "gst_report_url": data,
             },
         )
 
@@ -597,9 +597,12 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)-
 
             except HTTPError as e:
                 raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
+        await update_document(collection=database["gst_reference"],filter={"reference_id": reference_id},fields={"is_consumed":True,"consumed_at":datetime.now(timezone.utc)})
+
         report_data = response.json().get("data") or {}
 
-        await database["gst_analyzed_reports"].insert_one({
+        await database["gst_analyzed_report"].insert_one({
             "user_id": user_id,
             "reference_id": reference_id,
             "report": report_data,

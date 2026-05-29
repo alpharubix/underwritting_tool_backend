@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
+
+from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -37,6 +40,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
         print('database connected successfully')
         upload_hashmap = UploadHashMap()
         asyncio.create_task(upload_hashmap.clean_expired_entries())
+        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
