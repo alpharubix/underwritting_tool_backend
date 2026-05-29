@@ -51,6 +51,9 @@ async def initiate_itr_process (request: Request)->JSONResponse:
             except httpx.HTTPError as e:
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message": "Internal server error", "responseCode": None, "data": None})
 
+            if response.status_code == 406:
+                raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail={"message": "Invalid input data", "responseCode": None, "data": None})
+
             scoreme_response_json = response.json() #it never breaks because of external server standard response across all the requests
 
             print("This is the scoreme response for the itr link",scoreme_response_json)
@@ -141,14 +144,15 @@ async def is_itr_report_already_there(request:Request) -> JSONResponse:
 
         existing_report: Optional[dict] = await itr_repo.find_one(
             {"user_id": user_id},
-            {"_id": 1}
+            {"_id": 0}
         )
 
         if existing_report:
+            print(existing_report)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT,
-                          detail={"message": "Report already exists!", "data":{"is_proceed":False}})
+                          detail={"message": "Report already exists!", "data":{"is_proceed":False,"itr_reference_id":existing_report.get("reference_id"),"responseCode":None}})
         else:
-            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed","data":{"is_proceed":True}})
+            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed","data":{"is_proceed":True,"itr_reference_id":existing_report.get("reference_id"),"responseCode":None}})
     except HTTPException as e:
         logging.error(msg=str(e), exc_info=True)
         print(f"Conflict might happen if we allow this user: {str(e)}")
@@ -262,7 +266,7 @@ async def poll_email_link_status(database_conn) : #this function will run every 
             if bulk_update:
                 await itr_link_management.bulk_write(bulk_update)
 
-            await asyncio.sleep(50)
+            await asyncio.sleep(25)
 
 
         except httpx.HTTPError as e:
