@@ -62,19 +62,19 @@ def _next_month(dt: datetime) -> datetime:
 
 
 def get_pdf_date_range_parser_prompt():
-    prompt = """You are a financial document parser. You will be given one or more bank statement PDF files.
-
-Your task is to analyze each file and extract the **statement date range** (the starting and ending dates of the bank statement period).
+    prompt = pythonprompt = """Your task is to analyze each bank statement file and extract the **bank name** and **statement date range** (the starting and ending dates of the statement period).
 
 Return the result strictly as a JSON object in the following format:
 
 {
   "data": {
     "file1": {
+      "bank_name": "Bank Name Here",
       "starting_date": "DD-MM-YYYY",
       "ending_date": "DD-MM-YYYY"
     },
     "file2": {
+      "bank_name": "Bank Name Here",
       "starting_date": "DD-MM-YYYY",
       "ending_date": "DD-MM-YYYY"
     }
@@ -82,12 +82,13 @@ Return the result strictly as a JSON object in the following format:
 }
 
 Rules you MUST follow:
-1. Use the exact keys: "data", "starting_date", "ending_date".
+1. Use the exact keys: "data", "bank_name", "starting_date", "ending_date".
 2. Name each file key as "file1", "file2", "file3", etc., in the order the files were provided.
 3. Dates must strictly follow the format DD-MM-YYYY.
-4. If a date cannot be found in a file, set its value to null.
-5. Do NOT include any explanation, markdown, code blocks, or extra text — output raw JSON only.
-6. Do NOT wrap the response in ```json``` or any other formatting."""
+4. Extract the bank name exactly as it appears on the statement (e.g., "HDFC Bank", "State Bank of India"). If the bank name cannot be determined, set it to null.
+5. If a date cannot be found, set its value to null.
+6. Do NOT include any explanation, markdown, code blocks, or extra text — output raw JSON only.
+7. Do NOT wrap the response in ```json``` or any other formatting."""
 
     return prompt
 
