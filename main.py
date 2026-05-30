@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
+
+from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -23,6 +26,7 @@ from routes.bsa_route import bsa_router
 from routes.webhook_router import webhook_router
 from controller.bsa_uploads import UploadHashMap
 from routes.gst_router import gst_router
+from routes.itr_router import itr_router
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
         print('database connected successfully')
         upload_hashmap = UploadHashMap()
         asyncio.create_task(upload_hashmap.clean_expired_entries())
+        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
@@ -43,6 +48,9 @@ async def connect_to_databases(app: FastAPI): #database first approch
 
 
 app = FastAPI(lifespan=connect_to_databases)
+
+app.middleware("http")(authorization)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,7 +58,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.middleware("http")(authorization)
+
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(bsa_router)
@@ -59,6 +67,8 @@ app.include_router(webhook_router)
 
 app.include_router(gst_router)
 
+app.include_router(itr_router)
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port,workers=4,reload=True)

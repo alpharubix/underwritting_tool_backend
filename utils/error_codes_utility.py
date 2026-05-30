@@ -162,3 +162,26 @@ SCOREME_GST_POST_GSTIN_ERROR_MAP = {
         "message": "Authentication expired. Please generate OTP and authenticate again."
     }
 }
+
+SCOREME_ITR_POST_LINK_ERROR_MAP = {
+    "EPI022": {
+        "message": "Payload is Incorrect.",
+        "status_code": 400,
+        "data": None
+    },
+    "EBF017": {
+        "message": "Blank Input Field.",
+        "status_code": 400,
+        "data": None
+    },
+    "EIP018": {
+        "message": "Incorrect Input.",
+        "status_code":400,
+        "data": None
+    },
+    "ETI019": {
+        "message": "Technical Issue. Please Try Again.",
+        "status_code":500,
+        "data": None
+    }
+}

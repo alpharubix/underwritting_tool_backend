@@ -4,6 +4,7 @@ from starlette import status
 from starlette.responses import JSONResponse
 
 from controller.gst_contoller.gst_analyser_controller import gst_webhook_consumer
+from controller.itr_controller.itr_analyzer_controller import itr_webhook_consumer
 
 
 async def gst_webhook_receiver(input_data:dict,database:AsyncIOMotorDatabase)->JSONResponse:
@@ -36,7 +37,8 @@ async def itr_webhook_receiver(input_data:dict,database:AsyncIOMotorDatabase)->J
 
         await itr_collection.insert_one(input_data)
 
-        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"webhook received successfully"})
+        return await itr_webhook_consumer(webhook_data=input_data,database=database)
+
     except HTTPException as e:
         raise e
     except Exception as e:

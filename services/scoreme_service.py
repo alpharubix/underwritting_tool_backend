@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pymongo.results import UpdateResult
 from starlette.exceptions import HTTPException
 from starlette import status
-from custom_exceptions.bsa_exceptions import raise_bsa_exception
+from custom_exceptions.scoreme_exceptions import raise_bsa_exception
 
 async def upload_to_scoreme(files, data_params):
     payload = {"data": json.dumps(data_params)}
@@ -107,3 +107,4 @@ async def update_document(
     fields: dict,
 ) -> UpdateResult:
     return await collection.update_one(filter, {"$set": fields})
+

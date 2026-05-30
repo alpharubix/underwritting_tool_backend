@@ -15,7 +15,7 @@ from starlette.responses import JSONResponse
 from httpx import AsyncClient
 from httpx import HTTPError
 from config import config
-from custom_exceptions.bsa_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
+from custom_exceptions.scoreme_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
     raise_gst_validate_otp_exception, raise_gst_post_gstin_exception
 from services.scoreme_service import update_document
 
@@ -445,7 +445,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
             database:AsyncIOMotorDatabase = request.app.state.mongo_db
             gst_reference_coll:AsyncIOMotorCollection = database["gst_reference"]
 
-            # if this blocks works that means the result is successfull
+            # if this blocks works that means the result is successfully
 
             gst_reference_doc = {
                 "gstin": [gstin.upper()],
@@ -603,7 +603,7 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)-
 
         report_data = response.json().get("data") or {}
 
-        await database["gst_analyzed_reports"].insert_one({
+        await database["gst_analyzed_report"].insert_one({
             "user_id": user_id,
             "reference_id": reference_id,
             "report": report_data,

@@ -77,3 +77,15 @@ def is_password_valid(password: str):
         return False, "Password must contain at least one special character"
 
     return True, "Password is valid"
+
+
+def is_email_valid(email: str):
+    if len(email) < 5:
+        return False, "Email is too short"
+
+    email_pattern = r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$"
+
+    if not re.match(email_pattern, email):
+        return False
+
+    return True

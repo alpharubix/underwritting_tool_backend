@@ -1,5 +1,5 @@
 from fastapi import HTTPException
-from utils.error_codes_utility import SCOREME_BSA__ERROR_MAP,SCOREME_GST_BASIC_INFO_ERROR_MAP,SCOREME_GST_OTP_ERROR_MAP,SCOREME_GST_OTP_VALIDATE_ERROR_MAP,SCOREME_GST_POST_GSTIN_ERROR_MAP
+from utils.error_codes_utility import SCOREME_BSA__ERROR_MAP,SCOREME_GST_BASIC_INFO_ERROR_MAP,SCOREME_GST_OTP_ERROR_MAP,SCOREME_GST_OTP_VALIDATE_ERROR_MAP,SCOREME_GST_POST_GSTIN_ERROR_MAP,SCOREME_ITR_POST_LINK_ERROR_MAP
 
 def raise_bsa_exception(result:dict):
     """Raises an HTTPException based on ScoreMe's responseCode, if it's an error."""
@@ -56,4 +56,13 @@ def raise_gst_post_gstin_exception(result: dict):
         raise HTTPException(
             status_code=error_dict["status_code"],
             detail={"message": error_dict["message"],"responseCode": response_code}
+        )
+
+def raise_itr_post_link_exception(result: dict):
+    response_code = result.get("responseCode")
+    if response_code in SCOREME_ITR_POST_LINK_ERROR_MAP :
+        error_dict =  SCOREME_ITR_POST_LINK_ERROR_MAP[response_code]
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={"message": error_dict["message"],"responseCode": response_code,"data":error_dict["data"]}
         )
