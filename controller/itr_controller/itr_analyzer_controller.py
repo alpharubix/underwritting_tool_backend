@@ -155,7 +155,8 @@ async def get_itr_link_status_based_on_user(request:Request) -> JSONResponse:
             link_status_data = {
                 "itr_reference_id":latest_link.get("reference_id",None),
                 "itr_link_response_code":latest_link.get("link_response_code"),
-                "link_response_message":latest_link.get("link_response_message")
+                "link_response_message":latest_link.get("link_response_message"),
+                "link_url":latest_link.get("link_url")
             }
             return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"status fetched successfully","data":link_status_data})
         else:
