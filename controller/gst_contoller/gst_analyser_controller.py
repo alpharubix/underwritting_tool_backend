@@ -598,7 +598,8 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)-
             except HTTPError as e:
                 raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
-        await update_document(collection=database["gst_reference"],filter={"reference_id": reference_id},fields={"is_consumed":True,"consumed_at":datetime.now(timezone.utc)})
+            await update_document(collection=database["gst_reference"], filter={"reference_id": reference_id},
+                                  fields={"is_consumed": True, "consumed_at": datetime.now(timezone.utc)})
 
         report_data = response.json().get("data") or {}
 
