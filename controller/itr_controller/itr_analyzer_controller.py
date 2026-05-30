@@ -87,8 +87,8 @@ async def initiate_itr_process (request: Request)->JSONResponse:
                 "link_generated_at": request_initiated_at,
                 "link_url": scoreme_response_json.get("data").get("url"),
                 "link_expiry_time":scoreme_response_json.get("data").get("linkExpiryTime"),
-                "link_response_code": None,
-                "link_response_message": None,
+                "link_response_code": "ENC220",
+                "link_response_message":"The credential have not yet been submitted in the link. We are still awaiting the same",
                 "link_validated_at": None,
                 "last_updated_at": None,
             }
@@ -122,7 +122,7 @@ async def initiate_itr_process (request: Request)->JSONResponse:
                         "data": None
                     }
                 )
-            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","link_url": scoreme_response_json.get("data").get("url"),"responseCode":scoreme_response_json.get("responseCode"),"data":{"itr_reference_id":scoreme_response_json.get("data").get("referenceId")}})
+            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","link_url": scoreme_response_json.get("data").get("url"),"responseCode":"SYS_PENDING","data":{"itr_reference_id":scoreme_response_json.get("data").get("referenceId")}})
         else:
              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error","responseCode":None,"data":None})
 
