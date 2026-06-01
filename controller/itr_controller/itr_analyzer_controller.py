@@ -122,7 +122,7 @@ async def initiate_itr_process (request: Request)->JSONResponse:
                         "data": None
                     }
                 )
-            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","link_url": scoreme_response_json.get("data").get("url"),"responseCode":"SYS_PENDING","data":{"itr_reference_id":scoreme_response_json.get("data").get("referenceId")}})
+            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","responseCode":"SYS_PENDING","data":{"itr_reference_id":scoreme_response_json.get("data").get("referenceId")}})
         else:
              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error","responseCode":None,"data":None})
 
