@@ -206,3 +206,106 @@ def create_body_for_password_reset(otp):
     Regards,  
     Team 5PointCredit
     """
+
+def build_gst_email_body(user_name,reference_id):
+
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>GST Report Generated Successfully</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+        
+        <h2 style="color: #2c3e50;">GST Report Generated Successfully</h2>
+
+        <p>Dear {user_name},</p>
+
+        <p>
+            We are pleased to inform you that your GST report has been successfully generated.
+        </p>
+
+        <p>
+            <strong>Reference ID:</strong> {reference_id}}}
+        </p>
+
+        <p>
+            You can now log in to our dashboard and view the generated GST report.
+        </p>
+
+        <p>
+            If you experience any issues accessing the report or require further assistance,
+            please contact our support team.
+        </p>
+
+        <br>
+
+        <p>
+            Thank you for using our services.
+        </p>
+
+        <p>
+            Best Regards,<br>
+            <strong>5pointcredit Team</strong>
+        </p>
+
+    </div>
+</body>
+</html>"""
+
+def build_itr_report_mail_body(
+    recipient_name: str,
+    reference_id: str
+) -> tuple[str, str]:
+
+    subject = f"ITR Report Generated Successfully – Reference ID {reference_id}"
+
+    body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>ITR Report Generated Successfully</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+
+            <h2 style="color: #2c3e50;">ITR Report Generated Successfully</h2>
+
+            <p>Dear {recipient_name},</p>
+
+            <p>
+                We are pleased to inform you that your ITR report has been successfully generated.
+            </p>
+
+            <p>
+                <strong>Reference ID:</strong> {reference_id}
+            </p>
+
+            <p>
+                You can now log in to our dashboard and view the generated ITR report.
+            </p>
+
+            <p>
+                If you experience any issues accessing the report or require further assistance,
+                please contact our support team.
+            </p>
+
+            <br>
+
+            <p>
+                Thank you for using our services.
+            </p>
+
+            <p>
+                Best Regards,<br>
+                <strong>Support Team</strong>
+            </p>
+
+        </div>
+    </body>
+    </html>
+    """
+
+    return subject, body

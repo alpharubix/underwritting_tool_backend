@@ -1,6 +1,8 @@
 from bson import ObjectId
 from controller.email_controller import send_mail
-from utils.email_utility import create_body_for_new_registration, build_bsa_report_mail_body,create_body_for_password_reset
+from utils.email_utility import create_body_for_new_registration, build_bsa_report_mail_body, \
+    create_body_for_password_reset, build_gst_email_body, build_itr_report_mail_body
+
 
 def send_registration_mail_to_user(to,data):
     formated_body = create_body_for_new_registration(data)
@@ -52,3 +54,94 @@ def send_reset_email_to_user(to, otp):
     formatted_body = create_body_for_password_reset(otp)
     subject = "5PointCredit Password Reset Code 🔐"
     return send_mail(to, subject, formatted_body)
+
+async def send_gst_report_mail_based_on_request(user_id, reference_id, mongodb):
+    try:
+        user_row = await mongodb['users'].find_one(
+            {'_id': ObjectId(user_id)},
+            {
+                "email_id": 1,
+                "company_name": 1
+            }
+        )
+
+        if not user_row:
+            print(f"[Mail] User not found for user_id: {user_id}")
+            return
+
+        to_email = user_row.get("email_id")
+        recipient_name = user_row.get("company_name", "User")
+
+        if not to_email:
+            print(f"[Mail] No email found for user_id: {user_id}")
+            return
+
+        body = build_gst_email_body(
+            user_name= recipient_name,
+            reference_id=reference_id
+        )
+
+        send_mail(
+            to=to_email,
+            subject="Your GST Report Is Ready for Review",
+            body=body
+        )
+
+        print(
+            f"[Mail] GST report mail sent successfully "
+            f"for reference_id: {reference_id}"
+        )
+
+    except Exception as e:
+        print(
+            f"[Mail] Failed to send GST report mail "
+            f"for reference_id {reference_id}: {e}"
+        )
+
+
+async def send_itr_report_mail_based_on_request(
+    user_id: str,
+    reference_id: str,
+    mongodb
+):
+    try:
+        user_row = await mongodb['users'].find_one(
+            {'_id': ObjectId(user_id)},
+            {
+                "email_id": 1,
+                "company_name": 1
+            }
+        )
+
+        if not user_row:
+            print(f"[Mail] User not found for user_id: {user_id}")
+            return
+
+        to_email = user_row.get("email_id")
+        recipient_name = user_row.get("company_name", "User")
+
+        if not to_email:
+            print(f"[Mail] No email found for user_id: {user_id}")
+            return
+
+        subject, body = build_itr_report_mail_body(
+            recipient_name=recipient_name,
+            reference_id=reference_id
+        )
+
+        send_mail(
+            to=to_email,
+            subject=subject,
+            body=body
+        )
+
+        print(
+            f"[Mail] ITR report mail sent successfully "
+            f"for reference_id: {reference_id}"
+        )
+
+    except Exception as e:
+        print(
+            f"[Mail] Failed to send ITR report mail "
+            f"for reference_id {reference_id}: {e}"
+        )

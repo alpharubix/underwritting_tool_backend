@@ -8,7 +8,7 @@ from json import JSONDecodeError
 
 import httpx
 from bson import ObjectId
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorCollection,AsyncIOMotorDatabase
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -18,7 +18,7 @@ from config import config
 from custom_exceptions.scoreme_exceptions import raise_gst_basic_info_expectation, raise_gst_otp_expectation, \
     raise_gst_validate_otp_exception, raise_gst_post_gstin_exception
 from services.scoreme_service import update_document
-
+from controller.backgroud_task_controller import send_gst_report_mail_based_on_request
 logger = logging.getLogger(__name__)
 
 
@@ -545,7 +545,7 @@ async def get_all_user_ref_ids(request: Request)->JSONResponse:
 
 
 
-async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)->JSONResponse:
+async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase,background_task:BackgroundTasks)->JSONResponse:
     try:
         if webhook_data.get("responseCode") != "SRC001":
             data = webhook_data.get("data") or {}
@@ -609,6 +609,8 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase)-
             "report": report_data,
             "created_at": datetime.now(timezone.utc),
         })
+
+        background_task.add_task(send_gst_report_mail_based_on_request,user_id,reference_id,database)
 
         return JSONResponse(status_code=200, content={"message": "GST report successfully saved"})
 

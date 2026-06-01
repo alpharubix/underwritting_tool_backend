@@ -18,7 +18,6 @@ def create_smtp_connection():
         print("Error creating SMTP connection:", e)
         return None
 
-
 def send_mail(to, subject, body):
     try:
         smtp = create_smtp_connection()

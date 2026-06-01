@@ -332,7 +332,7 @@ class UploadHashMap:
             for key in expired_keys:
                 del self.__upload_hashmap__[key]
 
-            await asyncio.sleep(30)
+            await asyncio.sleep(60*5)
 
 class ReconstructedFile:
     """Mimics FastAPI UploadFile so upload_to_scoreme works without changes."""

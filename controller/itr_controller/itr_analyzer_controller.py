@@ -2,15 +2,15 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 from pymongo import UpdateOne
 from starlette import status
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.requests import Request
 import logging
 from starlette.responses import JSONResponse
 import config.config as url
+from controller.backgroud_task_controller import send_itr_report_mail_based_on_request
 from custom_exceptions.scoreme_exceptions import raise_itr_post_link_exception
 from services.scoreme_service import update_document
 from utils.auth_utility import is_email_valid
@@ -203,7 +203,7 @@ async def get_link_status_based_on_ref_id(request:Request) -> JSONResponse:
         link_status = itr_link_status.get("link_status")
         link_message = itr_link_status.get("link_response_message")
 
-        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"status fetched successfully","data":{"link_status":link_status,"link_message":link_message,"link_response_code":response_code}})
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"status fetched successfully","data":{"itr_link_status":link_status,"itr_link_message":link_message,"itr_link_response_code":response_code}})
 
     except HTTPException as e:
         logging.error(msg=str(e), exc_info=True)
@@ -330,7 +330,7 @@ def construct_itr_status_update(response_json: dict):
     return update_doc
 
 
-async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabase) -> JSONResponse:
+async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabase,background_task:BackgroundTasks) -> JSONResponse:
     try:
         if webhook_data.get("responseCode") != "SRC001":
             data = webhook_data.get("data") or {}
@@ -397,6 +397,8 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
             "report": report_data,
             "created_at": datetime.now(timezone.utc),
         })
+
+        background_task.add_task(send_itr_report_mail_based_on_request,user_id,reference_id,database)
 
         return JSONResponse(status_code=200, content={"message": "ITR report successfully saved"})
 
