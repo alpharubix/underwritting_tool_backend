@@ -80,12 +80,12 @@ async def initiate_itr_process (request: Request)->JSONResponse:
 
             #after saving the reference document to the collection construct the itr_link state management document for managing the lifecycle of the link
 
+
             itr_link = {  #link lifecycle management for internal system
                 "reference_id": scoreme_response_json.get("data").get("referenceId"),
                 "user_id": user_id,
                 "link_status":"PENDING",
                 "link_generated_at": request_initiated_at,
-                "link_url": scoreme_response_json.get("data").get("url"),
                 "link_expiry_time":scoreme_response_json.get("data").get("linkExpiryTime"),
                 "link_response_code": "ENC220",
                 "link_response_message":"The credential have not yet been submitted in the link. We are still awaiting the same",
@@ -156,7 +156,6 @@ async def get_itr_link_status_based_on_user(request:Request) -> JSONResponse:
                 "itr_reference_id":latest_link.get("reference_id",None),
                 "itr_link_response_code":latest_link.get("link_response_code"),
                 "link_response_message":latest_link.get("link_response_message"),
-                "link_url":latest_link.get("link_url")
             }
             return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"status fetched successfully","data":link_status_data})
         else:
@@ -278,7 +277,7 @@ async def poll_email_link_status(database_conn) : #this function will run every 
             if bulk_update:
                 await itr_link_management.bulk_write(bulk_update)
 
-            await asyncio.sleep(25)
+            await asyncio.sleep(30)
 
 
         except httpx.HTTPError as e:
