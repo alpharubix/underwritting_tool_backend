@@ -1,0 +1,1287 @@
+KYC API FRONTEND INTEGRATION DOCUMENTATION
+Underwriting Tool Backend
+Generated from current repository code on 2026-06-22
+
+SOURCE SCOPE
+This document covers the active FastAPI KYC routes registered in:
+- routes/kyc_router.py
+- controller/kyc_controller/aadhar_kyc_controller.py
+- middleware/authorization_middleware.py
+- custom_exceptions/scoreme_exceptions.py
+- utils/error_codes_utility.py
+- config/config.py
+
+This is frontend-integration-centric documentation. It describes what the frontend should send, what it can expect back, and the integration caveats visible in the current backend implementation.
+
+
+===============================================================================
+1. BASE PATH AND AUTHENTICATION
+===============================================================================
+
+Base path:
+  {API_BASE_URL}/v1/kyc
+
+Authentication:
+  All active KYC endpoints are protected by the global authorization middleware.
+  The frontend must already be logged in and must send the HttpOnly access_token
+  cookie with every KYC request.
+
+Frontend fetch requirement:
+  credentials: "include"
+
+Example:
+  await fetch(`${API_BASE_URL}/v1/kyc/aadhaar/details`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+Auth failure responses:
+
+Missing access_token cookie:
+  HTTP 401
+  {
+    "message": "Unauthorized Access"
+  }
+
+Invalid access_token:
+  HTTP 401
+  {
+    "message": "Invalid Token"
+  }
+
+Important frontend note:
+  Auth middleware errors are returned as top-level JSON. Most controller errors
+  are returned inside FastAPI's "detail" wrapper.
+
+
+===============================================================================
+2. RESPONSE SHAPES AND FRONTEND NORMALIZATION
+===============================================================================
+
+Successful responses usually follow:
+  {
+    "message": "...",
+    "data": ...,
+    "responseCode": "..."
+  }
+
+Some successful responses do not include responseCode.
+
+Controller errors raised through HTTPException are usually returned as:
+  {
+    "detail": {
+      "message": "...",
+      "data": ...,
+      "responseCode": "..."
+    }
+  }
+
+Auth errors are returned as:
+  {
+    "message": "..."
+  }
+
+Recommended frontend response normalizer:
+
+  async function parseApiResponse(response) {
+    const body = await response.json().catch(() => ({}));
+    const payload = body.detail || body;
+
+    return {
+      ok: response.ok,
+      status: response.status,
+      message: payload.message || "Request failed",
+      responseCode: payload.responseCode || null,
+      data: payload.data ?? null,
+      raw: body
+    };
+  }
+
+
+===============================================================================
+3. ACTIVE ENDPOINT SUMMARY
+===============================================================================
+
+The current KYC router exposes 8 active endpoints:
+
+1. POST /v1/kyc/aadhaar/generate-otp
+2. POST /v1/kyc/aadhaar/validate-otp
+3. GET  /v1/kyc/aadhaar/details
+4. GET  /v1/kyc/digilocker/generate-url
+5. POST /v1/kyc/digilocker/session-status
+6. POST /v1/kyc/digilocker/list-documents
+7. POST /v1/kyc/digilocker/document-url
+8. GET  /v1/kyc/digilocker/document-precheck
+
+Not active:
+  PATCH /v1/kyc/digilocker/session-status is implemented in the controller but
+  commented out in routes/kyc_router.py. Do not integrate it unless the route is
+  enabled in backend code.
+
+
+===============================================================================
+4. RECOMMENDED FRONTEND KYC FLOW
+===============================================================================
+
+AADHAAR FLOW
+
+Step 1:
+  POST /aadhaar/generate-otp
+  Collect Aadhaar number, validate it as exactly 12 digits, then request OTP.
+
+Step 2:
+  POST /aadhaar/validate-otp
+  Submit aadhaar_number, otp, and reference_id returned by Step 1.
+
+Step 3:
+  GET /aadhaar/details
+  Fetch stored Aadhaar details for the logged-in user.
+
+DIGILOCKER FLOW
+
+Step 1:
+  GET /digilocker/document-precheck
+  Optional but recommended on page load. If documents already exist, avoid
+  forcing the user through DigiLocker again.
+
+Step 2:
+  GET /digilocker/generate-url
+  Backend creates a DigiLocker session and returns kyc_flow_id plus a
+  digilocker_url.
+
+Step 3:
+  Redirect the user to data.digilocker_url or open it in a browser tab/window.
+
+Step 4:
+  POST /digilocker/session-status
+  Poll/check status using kyc_flow_id.
+
+Step 5:
+  POST /digilocker/list-documents
+  Fetch document list after consent is approved.
+
+Current blocker:
+  The public generate-url response returns kyc_flow_id and digilocker_url, but
+  list-documents requires session_id. The frontend cannot complete document
+  listing using only the currently returned public fields unless session_id is
+  obtained through another backend change or private/internal source.
+
+Step 6:
+  POST /digilocker/document-url
+  Fetch a downloadable URL for a selected document.
+
+Current blocker:
+  This endpoint also requires session_id.
+
+
+===============================================================================
+5. ENDPOINT DETAILS
+===============================================================================
+
+-------------------------------------------------------------------------------
+5.1 Generate Aadhaar OTP
+-------------------------------------------------------------------------------
+
+Endpoint:
+  POST /v1/kyc/aadhaar/generate-otp
+
+Purpose:
+  Validates Aadhaar number, calls the ScoreMe Aadhaar OTP API, stores OTP
+  session metadata, and returns a reference_id for OTP validation.
+
+Request headers:
+  Content-Type: application/json
+  Cookie: access_token=<jwt>
+
+Request body:
+  {
+    "aadhaar_number": "123456789012"
+  }
+
+Frontend validation:
+  aadhaar_number must be exactly 12 numeric characters.
+
+Success:
+  HTTP 201
+  {
+    "message": "OTP successfully sent to mobile number",
+    "data": {
+      "aadhaar_number": "123456789012",
+      "reference_id": "<scoreme-reference-id>"
+    }
+  }
+
+Frontend action on success:
+  Store data.reference_id temporarily until OTP validation completes.
+
+Known validation/error responses:
+
+Empty request body:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Body cannot be empty"
+    }
+  }
+
+Empty aadhaar_number:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Aadhaar number cannot be empty"
+    }
+  }
+
+Invalid aadhaar_number length or non-numeric value:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Invalid aadhaar number"
+    }
+  }
+
+Invalid JSON:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Invalid json"
+    }
+  }
+
+Upstream/network error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error"
+    }
+  }
+
+Important frontend caveat:
+  The controller reads input["aadhaar_number"] directly. If the request body is
+  non-empty but missing the aadhaar_number key, the backend can produce a generic
+  500. Always send the key explicitly.
+
+
+-------------------------------------------------------------------------------
+5.2 Validate Aadhaar OTP
+-------------------------------------------------------------------------------
+
+Endpoint:
+  POST /v1/kyc/aadhaar/validate-otp
+
+Purpose:
+  Validates OTP through ScoreMe, stores Aadhaar details, and marks the OTP
+  session complete.
+
+Request headers:
+  Content-Type: application/json
+  Cookie: access_token=<jwt>
+
+Request body:
+  {
+    "aadhaar_number": "123456789012",
+    "otp": "123456",
+    "reference_id": "<reference-id-from-generate-otp>"
+  }
+
+Success:
+  HTTP 200
+  {
+    "message": "Otp validation success",
+    "data": {
+      "...": "ScoreMe Aadhaar data"
+    }
+  }
+
+Frontend action on success:
+  Consider Aadhaar verification complete for the logged-in user.
+  You can then call GET /aadhaar/details if the UI needs stored details.
+
+Known validation/error responses:
+
+Empty request body:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Body cannot be empty"
+    }
+  }
+
+Missing aadhaar_number, otp, or reference_id:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Aadhaar number and Otp and referenceId is required"
+    }
+  }
+
+MongoDB or upstream/network error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error"
+    }
+  }
+
+Important frontend caveats:
+  reference_id is used by backend to update the local OTP session. It is not sent
+  to ScoreMe in the current implementation.
+
+  If ScoreMe returns an unmapped non-success responseCode, the current controller
+  may not return a clear explicit response. Treat an unexpected empty/invalid
+  response as a retryable or support-handled failure.
+
+
+-------------------------------------------------------------------------------
+5.3 Fetch Aadhaar Details
+-------------------------------------------------------------------------------
+
+Endpoint:
+  GET /v1/kyc/aadhaar/details
+
+Purpose:
+  Returns stored Aadhaar details for the authenticated user.
+
+Request:
+  No body.
+
+Success:
+  HTTP 200
+  {
+    "message": "aadhaar details fetched successfully",
+    "data": {
+      "...": "stored Aadhaar data"
+    },
+    "responseCode": "SYS_OK"
+  }
+
+Not found:
+  HTTP 404
+  {
+    "detail": {
+      "message": "aadhaar details not found for this user",
+      "data": null,
+      "responseCode": "SYS_NOT_FOUND"
+    }
+  }
+
+MongoDB error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error"
+    }
+  }
+
+Frontend note:
+  The backend excludes data.photoBase64 and data.xmlBase64 from the response.
+
+
+-------------------------------------------------------------------------------
+5.4 Generate DigiLocker URL
+-------------------------------------------------------------------------------
+
+Endpoint:
+  GET /v1/kyc/digilocker/generate-url
+
+Purpose:
+  Creates a DigiLocker consent session through ScoreMe, stores it locally, and
+  returns a local kyc_flow_id plus a DigiLocker URL for user consent.
+
+Request:
+  No body.
+
+Success:
+  HTTP 200
+  {
+    "message": "Digilocker link generated successfully",
+    "data": {
+      "kyc_flow_id": "<local-kyc-flow-id>",
+      "digilocker_url": "https://..."
+    },
+    "responseCode": "SYS_OKAY"
+  }
+
+Frontend action on success:
+  Store data.kyc_flow_id.
+  Redirect/open data.digilocker_url for the user to complete consent.
+  Use data.kyc_flow_id for POST /digilocker/session-status.
+
+Known error responses:
+
+Mapped ScoreMe error:
+  HTTP 400, 500, 503, or 504 depending on responseCode
+  {
+    "detail": {
+      "message": "...",
+      "responseCode": "...",
+      "data": {}
+    }
+  }
+
+Upstream/network error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error",
+      "data": null,
+      "responseCode": "SYS_INT_ERR"
+    }
+  }
+
+MongoDB error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error",
+      "data": null,
+      "responseCode": "SYS_INT_ERR"
+    }
+  }
+
+Unexpected non-success response:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error",
+      "data": null,
+      "responseCode": "SYS_INT_ERR"
+    }
+  }
+
+Important frontend caveat:
+  The backend stores ScoreMe session_id internally but does not return it from
+  this endpoint. Later document APIs require session_id, so the current public
+  contract has an integration gap.
+
+
+-------------------------------------------------------------------------------
+5.5 Check DigiLocker Session Status
+-------------------------------------------------------------------------------
+
+Endpoint:
+  POST /v1/kyc/digilocker/session-status
+
+Purpose:
+  Uses kyc_flow_id to find the stored DigiLocker session, checks local expiry,
+  calls ScoreMe documentConsentStatus with the stored session_id, updates local
+  session_status, and returns the current KYC flow status.
+
+Request headers:
+  Content-Type: application/json
+  Cookie: access_token=<jwt>
+
+Request body:
+  {
+    "kyc_flow_id": "<local-kyc-flow-id>"
+  }
+
+Success:
+  HTTP 200
+  {
+    "message": "Kyc flow status fetched successfully",
+    "data": {
+      "kyc_flow_id": "<local-kyc-flow-id>",
+      "session_status": "CONSENT_APPROVED"
+    },
+    "responseCode": "SYS_OK"
+  }
+
+Possible session_status values:
+  CONSENT_PENDING
+  IN_PROGRESS
+  CONSENT_APPROVED
+  CONSENT_REJECTED
+  TIMEOUT
+  EXPIRED
+  ERROR
+
+ScoreMe responseCode to session_status mapping:
+  SRC001 -> CONSENT_APPROVED
+  RNP020 -> IN_PROGRESS
+  RNP030 -> CONSENT_REJECTED
+  ERT788 -> TIMEOUT
+  Any other code -> ERROR
+
+Known validation/error responses:
+
+Empty request body:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Request body cannot be empty"
+    }
+  }
+
+Missing kyc_flow_id:
+  HTTP 400
+  {
+    "detail": {
+      "message": "kyc_flow_id is required"
+    }
+  }
+
+Unknown kyc_flow_id for current user:
+  HTTP 404
+  {
+    "detail": {
+      "message": "Invalid kyc_flow_id",
+      "data": null,
+      "responseCode": "SYS_INPUT_ERR"
+    }
+  }
+
+Local session expired:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Session expired",
+      "data": {
+        "kyc_flow_id": "...",
+        "session_status": "EXPIRED"
+      },
+      "responseCode": "SYS_INPUT_ERR"
+    }
+  }
+
+ScoreMe timeout:
+  HTTP 504
+  {
+    "detail": {
+      "message": "Gateway timeout error",
+      "data": null,
+      "responseCode": "SYS_INT_ERR"
+    }
+  }
+
+Invalid JSON:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Invalid JSON",
+      "data": null,
+      "responseCode": "SYS_INPUT_ERROR"
+    }
+  }
+
+Other exception:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error",
+      "data": null,
+      "responseCode": "SYS_INT_ERR"
+    }
+  }
+
+Frontend polling guidance:
+  Poll this endpoint with kyc_flow_id after the user returns from DigiLocker.
+  Stop polling when status is one of:
+    CONSENT_APPROVED
+    CONSENT_REJECTED
+    TIMEOUT
+    EXPIRED
+    ERROR
+
+Important runtime caveat:
+  The controller passes KYC_FLOW_STATUS enum objects into some JSONResponse
+  bodies. Depending on runtime serialization behavior, this can cause a JSON
+  serialization error instead of returning the string value. If the frontend sees
+  a 500 around status checks, this is a likely backend cause.
+
+
+-------------------------------------------------------------------------------
+5.6 List DigiLocker Documents
+-------------------------------------------------------------------------------
+
+Endpoint:
+  POST /v1/kyc/digilocker/list-documents
+
+Purpose:
+  Calls ScoreMe documentList using session_id, stores the returned document list
+  in user_kyc_documents, and returns the stored document list.
+
+Request headers:
+  Content-Type: application/json
+  Cookie: access_token=<jwt>
+
+Request body:
+  {
+    "session_id": "<session-id>"
+  }
+
+Success:
+  HTTP 200
+  {
+    "message": "Session status updated successfully",
+    "data": {
+      "user_id": "...",
+      "document_list": [
+        {
+          "documentType": "...",
+          "documentFormat": "...",
+          "documentUri": "..."
+        }
+      ],
+      "session_id": "..."
+    },
+    "responseCode": "SYS_OKAY"
+  }
+
+Known validation/error responses:
+
+Empty request body:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Request body cannot be empty"
+    }
+  }
+
+Missing session_id:
+  HTTP 400
+  {
+    "detail": {
+      "message": "session_id is required"
+    }
+  }
+
+Unknown session_id:
+  HTTP 404
+  {
+    "detail": {
+      "message": "Invalid session_id"
+    }
+  }
+
+Mapped ScoreMe document error:
+  HTTP 400, 404, 408, 500, or 503 depending on responseCode
+  {
+    "detail": {
+      "message": "...",
+      "responseCode": "...",
+      "data": {}
+    }
+  }
+
+Invalid JSON:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Invalid JSON",
+      "data": null,
+      "responseCode": "SYS_INPUT_ERROR"
+    }
+  }
+
+Upstream/network error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error"
+    }
+  }
+
+Frontend action on success:
+  Render document_list.
+  Use documentType, documentFormat, and documentUri exactly as returned when
+  calling /digilocker/document-url.
+
+Important frontend caveat:
+  This endpoint requires session_id, but the active generate-url endpoint does
+  not expose session_id to the frontend.
+
+Implementation caveat:
+  custom_exceptions/scoreme_exceptions.py defines
+  raise_digilocker_document_list_exception twice. The second definition overrides
+  the first at runtime, so the GET_DOCUMENT error map is used for both document
+  list and document URL calls.
+
+
+-------------------------------------------------------------------------------
+5.7 Fetch DigiLocker Document URL
+-------------------------------------------------------------------------------
+
+Endpoint:
+  POST /v1/kyc/digilocker/document-url
+
+Purpose:
+  Requests a downloadable URL for a selected DigiLocker document and updates the
+  matching local document entry in user_kyc_documents.
+
+Request headers:
+  Content-Type: application/json
+  Cookie: access_token=<jwt>
+
+Request body:
+  {
+    "session_id": "<session-id>",
+    "document_format": "PDF",
+    "document_uri": "<document-uri-from-list-documents>",
+    "document_type": "<documentType-from-list-documents>"
+  }
+
+Success:
+  HTTP 200
+  {
+    "message": "Session status updated successfully",
+    "data": {
+      "documentUrl": "https://..."
+    },
+    "responseCode": "SYS_OKAY"
+  }
+
+Known validation/error responses:
+
+Empty request body:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Request body cannot be empty"
+    }
+  }
+
+Missing required field:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Session_id,document_format,document_uri,document_type are required"
+    }
+  }
+
+No stored document list for session_id:
+  HTTP 404
+  {
+    "detail": {
+      "message": "Invalid session_id"
+    }
+  }
+
+Mapped ScoreMe document error:
+  HTTP 400, 404, 408, 500, or 503 depending on responseCode
+  {
+    "detail": {
+      "message": "...",
+      "responseCode": "...",
+      "data": {}
+    }
+  }
+
+Invalid JSON:
+  HTTP 400
+  {
+    "detail": {
+      "message": "Invalid JSON",
+      "data": null,
+      "responseCode": "SYS_INPUT_ERROR"
+    }
+  }
+
+Upstream/network error:
+  HTTP 500
+  {
+    "detail": {
+      "message": "Internal server error"
+    }
+  }
+
+Frontend notes:
+  document_format and document_uri are sent to ScoreMe.
+  document_type is not sent to ScoreMe; backend uses it to update the matching
+  item in the locally stored document_list.
+
+Important caveat:
+  If document_type does not match a stored documentList.documentType, the backend
+  can still return HTTP 200 with the upstream documentUrl while no local document
+  entry is updated.
+
+
+-------------------------------------------------------------------------------
+5.8 DigiLocker Document Precheck
+-------------------------------------------------------------------------------
+
+Endpoint:
+  GET /v1/kyc/digilocker/document-precheck
+
+Purpose:
+  Returns previously stored DigiLocker KYC documents for the authenticated user.
+  Use this to avoid repeating DigiLocker consent if documents already exist.
+
+Request:
+  No body.
+
+Success:
+  HTTP 200
+  {
+    "message": "Kyc documents found",
+    "data": {
+      "user_id": "...",
+      "document_list": [
+        {
+          "documentType": "...",
+          "documentFormat": "...",
+          "documentUri": "...",
+          "documentUrl": "https://..."
+        }
+      ],
+      "session_id": "..."
+    },
+    "responseCode": "SYS_OKAY"
+  }
+
+Not found:
+  HTTP 404
+  {
+    "detail": {
+      "message": "No Kyc Documents found for this user",
+      "data": {},
+      "responseCode": "SYS_NOT_FOUND"
+    }
+  }
+
+Frontend notes:
+  Call this endpoint on KYC page load if you want to show previously fetched
+  documents.
+
+  The backend removes document_url_fetched_at from document_list items before
+  returning the response.
+
+
+===============================================================================
+6. SCOREME ERROR CODES EXPOSED TO FRONTEND
+===============================================================================
+
+The backend maps several ScoreMe responseCode values to HTTPException responses.
+These are returned in this general shape:
+
+  {
+    "detail": {
+      "message": "...",
+      "responseCode": "...",
+      "data": null or {}
+    }
+  }
+
+AADHAAR OTP GENERATION
+
+EBF017:
+  HTTP 400
+  Blank Input Field.
+
+EIP018:
+  HTTP 400
+  Incorrect Input.
+
+EPI022:
+  HTTP 400
+  Payload is Incorrect.
+
+EIS042:
+  HTTP 503
+  Information Source is Not Working.
+
+EUP007:
+  HTTP 500
+  Unable To Process. Please Reach Out To Support.
+
+EAN1229:
+  HTTP 400
+  Aadhaar number does not have a mobile number registered with it.
+
+EAN1391:
+  HTTP 403
+  Aadhaar locked by the Aadhaar number holder.
+
+EAE168:
+  HTTP 404
+  Aadhaar does not exist.
+
+ERT788:
+  HTTP 504
+  Request Timed Out.
+
+EAS517:
+  HTTP 429
+  OTP already sent. Please try after 120 Sec.
+
+EML1916:
+  HTTP 429
+  You've reached the maximum number of attempts.
+
+
+AADHAAR OTP VALIDATION
+
+EBF017:
+  HTTP 400
+  Blank Input Field.
+
+EIP018:
+  HTTP 400
+  Incorrect Input.
+
+EPI022:
+  HTTP 400
+  Payload is Incorrect.
+
+EIS042:
+  HTTP 503
+  Information Source is Not Working.
+
+EUP007:
+  HTTP 500
+  Unable To Process. Please Reach Out To Support.
+
+ETP011:
+  HTTP 400
+  Incorrect OTP.
+
+EOE794:
+  HTTP 400
+  OTP either expired or not generated yet. Kindly regenerate OTP.
+
+EAS517:
+  HTTP 429
+  OTP already sent. Please try after 10 min.
+
+EOE082:
+  HTTP 400
+  OTP Expired.
+
+ELE077:
+  HTTP 400
+  OTP Link Expired.
+
+EAN1390:
+  HTTP 400
+  Your Aadhaar has been suspended or cancelled.
+
+ERT788:
+  HTTP 408
+  Request Timed Out.
+
+
+DIGILOCKER URL GENERATION
+
+EBF017:
+  HTTP 400
+  Blank Input Field.
+
+EPI022:
+  HTTP 400
+  Payload is Incorrect.
+
+EIP018:
+  HTTP 400
+  Incorrect Input.
+
+EIS042:
+  HTTP 503
+  Information Source is Not Working.
+
+EUP007:
+  HTTP 500
+  Unable To Process. Please Reach Out To Support.
+
+ERT788:
+  HTTP 504
+  Request Timed Out.
+
+
+DIGILOCKER DOCUMENT LIST / DOCUMENT URL
+
+Due to the duplicate helper function definition in scoreme_exceptions.py, the
+runtime mapping used is DIGILOCKER_GET_DOCUMENT_ERROR_MAP.
+
+EBF017:
+  HTTP 400
+  Blank Input Field.
+
+EPI022:
+  HTTP 400
+  Payload is Incorrect.
+
+EIP018:
+  HTTP 400
+  Incorrect Input.
+
+EIS042:
+  HTTP 503
+  Information Source is Not Working.
+
+EUP007:
+  HTTP 500
+  Unable To Process. Please Reach Out To Support.
+
+ERT788:
+  HTTP 408
+  Request Timed Out.
+
+ENI004:
+  HTTP 404
+  No Information Found.
+
+
+===============================================================================
+7. FRONTEND TYPES
+===============================================================================
+
+Suggested TypeScript-style types:
+
+  type ApiEnvelope<T> = {
+    message: string;
+    data: T | null;
+    responseCode?: string | null;
+  };
+
+  type AadhaarOtpResponse = {
+    aadhaar_number: string;
+    reference_id: string;
+  };
+
+  type AadhaarValidateRequest = {
+    aadhaar_number: string;
+    otp: string;
+    reference_id: string;
+  };
+
+  type DigiLockerGenerated = {
+    kyc_flow_id: string;
+    digilocker_url: string;
+  };
+
+  type KycFlowStatus =
+    | "CONSENT_PENDING"
+    | "IN_PROGRESS"
+    | "EXPIRED"
+    | "TIMEOUT"
+    | "CONSENT_APPROVED"
+    | "CONSENT_REJECTED"
+    | "ERROR";
+
+  type DigiLockerStatusResponse = {
+    kyc_flow_id: string;
+    session_status: KycFlowStatus;
+  };
+
+  type KycDocument = {
+    documentType: string;
+    documentFormat: string;
+    documentUri: string;
+    documentUrl?: string;
+    [key: string]: unknown;
+  };
+
+  type KycDocumentsResponse = {
+    user_id: string;
+    session_id: string;
+    document_list: KycDocument[];
+  };
+
+
+===============================================================================
+8. FRONTEND FETCH EXAMPLES
+===============================================================================
+
+Generate Aadhaar OTP:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/aadhaar/generate-otp`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      aadhaar_number: aadhaarNumber
+    })
+  });
+
+  const result = await parseApiResponse(response);
+
+
+Validate Aadhaar OTP:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/aadhaar/validate-otp`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      aadhaar_number: aadhaarNumber,
+      otp,
+      reference_id: referenceId
+    })
+  });
+
+  const result = await parseApiResponse(response);
+
+
+Generate DigiLocker URL:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/digilocker/generate-url`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+  const result = await parseApiResponse(response);
+
+  if (result.ok) {
+    const { kyc_flow_id, digilocker_url } = result.data;
+    // Store kyc_flow_id.
+    // Redirect/open digilocker_url.
+  }
+
+
+Check DigiLocker status:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/digilocker/session-status`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      kyc_flow_id: kycFlowId
+    })
+  });
+
+  const result = await parseApiResponse(response);
+
+
+Document precheck:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/digilocker/document-precheck`, {
+    method: "GET",
+    credentials: "include"
+  });
+
+  const result = await parseApiResponse(response);
+
+
+List DigiLocker documents:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/digilocker/list-documents`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      session_id: sessionId
+    })
+  });
+
+  const result = await parseApiResponse(response);
+
+
+Fetch document URL:
+
+  const response = await fetch(`${API_BASE_URL}/v1/kyc/digilocker/document-url`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      session_id: sessionId,
+      document_format: document.documentFormat,
+      document_uri: document.documentUri,
+      document_type: document.documentType
+    })
+  });
+
+  const result = await parseApiResponse(response);
+
+
+===============================================================================
+9. FRONTEND INTEGRATION CHECKLIST
+===============================================================================
+
+Before integrating:
+  Confirm API_BASE_URL for the target environment.
+  Confirm login flow sets access_token cookie.
+  Confirm browser requests use credentials: "include".
+  Confirm CORS/cookie settings are compatible with the frontend domain.
+
+Aadhaar UI:
+  Validate Aadhaar as exactly 12 digits before calling generate-otp.
+  Keep reference_id from generate-otp until validate-otp completes.
+  Display ScoreMe mapped error messages directly where appropriate.
+  Treat 429 responses as rate-limit/attempt-limit states.
+
+DigiLocker UI:
+  Call document-precheck first if returning users should skip DigiLocker.
+  Store kyc_flow_id returned by generate-url.
+  Redirect/open digilocker_url for consent.
+  Poll session-status using kyc_flow_id.
+  Stop polling on terminal states: CONSENT_APPROVED, CONSENT_REJECTED, TIMEOUT,
+  EXPIRED, or ERROR.
+
+Document UI:
+  The current API requires session_id for list-documents and document-url.
+  The active public generate-url response does not return session_id.
+  A backend contract change is needed before a pure frontend integration can
+  reliably complete document listing and URL fetching.
+
+Error handling:
+  Normalize both top-level errors and detail-wrapped errors.
+  Use HTTP status for UI category, and message/responseCode for specific copy.
+  Do not assume responseCode is always present.
+  Do not assume data is always present.
+
+
+===============================================================================
+10. CURRENT CONTRACT CAVEATS FOR FRONTEND TEAM
+===============================================================================
+
+1. session_id is not exposed after DigiLocker URL generation.
+   generate-url returns kyc_flow_id and digilocker_url only, but list-documents
+   and document-url require session_id. This blocks full document retrieval from
+   the frontend with the currently active public contract.
+
+2. PATCH /digilocker/session-status is not active.
+   It exists in the controller but is commented out in the router.
+
+3. Response wrappers are inconsistent.
+   Success responses are top-level. Controller errors are usually under detail.
+   Auth errors are top-level.
+
+4. Missing aadhaar_number key can produce a generic server error.
+   The generate-otp controller directly indexes input["aadhaar_number"].
+
+5. Validate-OTP has no clear fallback for unmapped non-success ScoreMe responses.
+   The frontend should defensively handle unexpected/empty responses.
+
+6. DigiLocker status may serialize enum objects incorrectly.
+   Some JSONResponse bodies contain KYC_FLOW_STATUS enum instances instead of
+   plain strings. Runtime behavior depends on serialization support.
+
+7. Duplicate exception helper affects document error mapping.
+   raise_digilocker_document_list_exception is defined twice. The second
+   definition wins at runtime and uses DIGILOCKER_GET_DOCUMENT_ERROR_MAP.
+
+8. document-url may return 200 even if local update does not match a document.
+   If document_type does not match stored documentList.documentType, the upstream
+   URL can still be returned while the local document entry is not updated.
+
+
+===============================================================================
+11. MINIMUM BACKEND CONTRACT CHANGE RECOMMENDED FOR COMPLETE FRONTEND INTEGRATION
+===============================================================================
+
+To let the frontend complete the DigiLocker flow without private/internal access,
+one of these backend changes is needed:
+
+Option A:
+  Return session_id from GET /v1/kyc/digilocker/generate-url.
+
+Option B:
+  Change POST /v1/kyc/digilocker/list-documents and
+  POST /v1/kyc/digilocker/document-url to accept kyc_flow_id instead of
+  session_id, then resolve session_id server-side.
+
+Option B is safer because it avoids exposing the upstream ScoreMe session_id and
+keeps the frontend contract centered on the backend-owned kyc_flow_id.
+
+
+END OF DOCUMENT

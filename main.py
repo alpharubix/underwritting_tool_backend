@@ -1,13 +1,10 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
-
 from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -16,7 +13,6 @@ logging.basicConfig(
 
 logging.getLogger("motor").setLevel(logging.WARNING)
 logging.getLogger("pymongo").setLevel(logging.WARNING)
-
 from database.databse_config import get_mongo_db,get_postgres_conn
 from fastapi import FastAPI
 from routes.auth_router import auth_router
@@ -27,6 +23,7 @@ from routes.webhook_router import webhook_router
 from controller.bsa_uploads import UploadHashMap
 from routes.gst_router import gst_router
 from routes.itr_router import itr_router
+from routes.kyc_router import kyc_router
 
 
 logger = logging.getLogger(__name__)
@@ -62,12 +59,10 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(bsa_router)
-
 app.include_router(webhook_router)
-
 app.include_router(gst_router)
-
 app.include_router(itr_router)
+app.include_router(kyc_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))

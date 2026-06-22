@@ -1,5 +1,8 @@
 from fastapi import HTTPException
-from utils.error_codes_utility import SCOREME_BSA__ERROR_MAP,SCOREME_GST_BASIC_INFO_ERROR_MAP,SCOREME_GST_OTP_ERROR_MAP,SCOREME_GST_OTP_VALIDATE_ERROR_MAP,SCOREME_GST_POST_GSTIN_ERROR_MAP,SCOREME_ITR_POST_LINK_ERROR_MAP
+from utils.error_codes_utility import SCOREME_BSA__ERROR_MAP, SCOREME_GST_BASIC_INFO_ERROR_MAP, \
+    SCOREME_GST_OTP_ERROR_MAP, SCOREME_GST_OTP_VALIDATE_ERROR_MAP, SCOREME_GST_POST_GSTIN_ERROR_MAP, \
+    SCOREME_ITR_POST_LINK_ERROR_MAP, SCOREME_AADHAAR_OTP_ERROR_MAP, AADHAAR_OTP_ERROR_MAP,DIGIOCKER_URL_ERROR_MAP,DIGILOCKER_DOCUMENT_LIST_ERROR_MAP,DIGILOCKER_GET_DOCUMENT_ERROR_MAP
+
 
 def raise_bsa_exception(result:dict):
     """Raises an HTTPException based on ScoreMe's responseCode, if it's an error."""
@@ -65,4 +68,79 @@ def raise_itr_post_link_exception(result: dict):
         raise HTTPException(
             status_code=error_dict["status_code"],
             detail={"message": error_dict["message"],"responseCode": response_code,"data":error_dict["data"]}
+        )
+
+def raise_aadhaar_verification_exception(result: dict):
+    response_code = result.get("responseCode")
+
+    if response_code in SCOREME_AADHAAR_OTP_ERROR_MAP:
+        error_dict = SCOREME_AADHAAR_OTP_ERROR_MAP[response_code]
+
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={
+                "message": error_dict["message"],
+                "responseCode": response_code,
+                "data": error_dict["data"]
+            }
+        )
+
+def raise_digilocker_url_exception(result: dict):
+    response_code = result.get("responseCode")
+
+    if response_code in DIGIOCKER_URL_ERROR_MAP:
+        error_dict = DIGIOCKER_URL_ERROR_MAP[response_code]
+
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={
+                "message": error_dict["message"],
+                "responseCode": response_code,
+                "data": error_dict["data"]
+            }
+        )
+
+def raise_aadhaar_otp_exception(result: dict):
+    response_code = result.get("responseCode")
+
+    if response_code in AADHAAR_OTP_ERROR_MAP:
+        error_dict = AADHAAR_OTP_ERROR_MAP[response_code]
+
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={
+                "message": error_dict["message"],
+                "responseCode": response_code,
+                "data": error_dict["data"]
+            }
+        )
+
+def raise_digilocker_document_list_exception(result: dict):
+    response_code = result.get("responseCode")
+
+    if response_code in DIGILOCKER_DOCUMENT_LIST_ERROR_MAP:
+        error_dict = DIGILOCKER_DOCUMENT_LIST_ERROR_MAP[response_code]
+
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={
+                "message": error_dict["message"],
+                "responseCode": response_code,
+                "data": error_dict["data"]
+            }
+        )
+
+def raise_digilocker_document_list_exception(result: dict):
+    response_code = result.get("responseCode")
+
+    if response_code in DIGILOCKER_GET_DOCUMENT_ERROR_MAP:
+        error_dict = DIGILOCKER_GET_DOCUMENT_ERROR_MAP[response_code]
+
+        raise HTTPException(
+            status_code=error_dict["status_code"],
+            detail={
+                "message": error_dict["message"],
+                "responseCode": response_code,
+                "data": error_dict["data"]
+            }
         )
