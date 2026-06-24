@@ -28,7 +28,6 @@ async def pdf_date_parser(files,data_params):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={"message":f"{field} is required"}
-
                 )
 
         if not files:
