@@ -1,18 +1,21 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-
+import json
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
 
 from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
+from routes.bank_scoring_routes import bank_scoring_router
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
+
+
 
 logging.getLogger("motor").setLevel(logging.WARNING)
 logging.getLogger("pymongo").setLevel(logging.WARNING)
@@ -28,7 +31,6 @@ from controller.bsa_uploads import UploadHashMap
 from routes.gst_router import gst_router
 from routes.itr_router import itr_router
 
-
 logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def connect_to_databases(app: FastAPI): #database first approch
@@ -39,6 +41,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
         app.state.postgres_conn = postgres_conn
         print('database connected successfully')
         upload_hashmap = UploadHashMap()
+        await seed_database(mongo_db)
         asyncio.create_task(upload_hashmap.clean_expired_entries())
         asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
@@ -69,6 +72,25 @@ app.include_router(gst_router)
 
 app.include_router(itr_router)
 
+app.include_router(bank_scoring_router)
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
+
+
+#-------------------------------------------ROUGH WORK AND TESTING CODE BELOW DO NOT CONSIDER-------------------------------------------
+
+#SEEDING PART 
+async def seed_database(mongo_db):
+    bank_parameters_collection = mongo_db["bank_parameters"]
+    # --result = -await bank_parameters_collection.delete_many({})
+    existing_entry = await bank_parameters_collection.count_documents({})
+    if existing_entry > 0:
+        print("Bank parameters already seeded")
+        return
+    with open("bank_params.json", "r") as f:
+        bank_parameters = json.load(f)
+    await bank_parameters_collection.insert_many(bank_parameters)
+
+    print("Bank parameters seeded successfully")
