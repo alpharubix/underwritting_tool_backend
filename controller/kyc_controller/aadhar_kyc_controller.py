@@ -7,7 +7,7 @@ import httpx
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException
 from starlette import status
-from httpx import AsyncClient,HTTPError
+from httpx import AsyncClient, HTTPError, HTTPStatusError, RequestError
 from starlette.responses import JSONResponse
 import config.config as config
 from config.config import KYC_FLOW_STATUS
@@ -101,12 +101,28 @@ async def validate_aadhaar_otp(request):
                                 "clientId": os.getenv("CLIENT_ID"), # Matches your .env
                                 "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
                             })
-            except HTTPError as err:
-                logging.error(msg=str(err))
-                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"message": "Internal server error"})
+                print(response.text)
+                response.raise_for_status()
+
+            except HTTPStatusError as err:
+                print("ScoreMe returned HTTP error")
+                print(f"Status Code: {err.response.status_code}")
+                print(f"Response Text: {err.response.text}")
+                print(f"Full Error: {err}")  # Add this for more details
+
+            except RequestError as err:
+                print("Network error occurred")
+                print(f"Error Type: {type(err).__name__}")
+                print(f"Error Message: {str(err)}")  # Convert exception to string
+                print(f"Full Error: {err}")
+
+            except Exception as err:
+                print(f"Unexpected error: {type(err).__name__}")
+                print(f"Details: {str(err)}")
 
         logging.info(msg=f"status of the scoreme api call {response.status_code} || response {response.text}")
         result = response.json()
+        result_copy = result.copy()
 
 
         if result.get("responseCode") == "SRC001": #immediate success fall back
@@ -118,13 +134,16 @@ async def validate_aadhaar_otp(request):
             result['created_at'] = datetime.now(timezone.utc)
             result['last_updated_at'] = datetime.now(timezone.utc)
 
+            result.pop("created_at")
+            result.pop("last_updated_at")
+
 
             await aadhaar_details_coll.insert_one(result)
             await aadhar_otp_doc.update_one({"reference_id":reference_id},{"$set":{"otp_status":"COMPLETED","last_updated_at":datetime.now(timezone.utc)}})
-            result.pop("data").pop("photoBase64")
-            result.pop("data").pop("xmlBase64")
 
-            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Otp validation success","data":result.get("data")})
+
+
+            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Otp validation success","data":result_copy})
 
         response_code = result.get("responseCode")
 
