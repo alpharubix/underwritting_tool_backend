@@ -157,7 +157,6 @@ async def merge_reference_ids(
 
     if response.status_code != 200:
         raise Exception(f"Merge API failed: {response.text}")
-
     scoreme_response = response.json()
 
     new_reference_id = scoreme_response.get("data", {}).get("referenceId")

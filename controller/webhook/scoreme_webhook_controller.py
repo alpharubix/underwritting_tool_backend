@@ -43,3 +43,21 @@ async def itr_webhook_receiver(input_data:dict,database:AsyncIOMotorDatabase,bac
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal Server Error"})
 
+
+
+async def credit_bureau_webhook_receiver(input_data:dict,database:AsyncIOMotorDatabase,background_task:BackgroundTasks)->JSONResponse:
+    try:
+        if not input_data:
+            HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Body should not be empty")
+
+        credit_bureau_collection = database["credit_bureau_webhook_data"]
+
+        await credit_bureau_collection.insert_one(input_data)
+
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Credit Bureau Webhook Received"})
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal Server Error"})
+
