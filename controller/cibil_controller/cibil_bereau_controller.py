@@ -274,6 +274,16 @@ async def validate_cibil_otp(request):
                     }
                 },
             )
+        else:
+            await coll.update_one(
+                {"_id": otp_document["_id"]},
+                {
+                    "$set": {
+                        "otp_status": CibilOTPStatus.FAILED.value,
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                })
+
 
         return raise_cibil_validate_otp_exception(api_response)
 
@@ -442,6 +452,8 @@ async def resend_cibil_otp(request):
             },
         )
         
+# async def cibil_webhook_consumer(request):
+#     try:
 
 
 

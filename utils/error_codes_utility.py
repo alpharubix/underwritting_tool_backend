@@ -531,15 +531,20 @@ CIBIL_BUREAU_GENERATE_OTP_ERROR_MAP = {
     "EEA2006":{
         "status_code": 400,
         "message":"Error in Address"
+    },
+    "EBF017":{
+        "status_code": 400,
+        "message":"Blank Input Field"
     }
 }
 
 CIBIL_VALIDATE_OTP_ERROR_MAP = {
-    "SOS175": {"message": "Invalid OTP", "staus_code": status.HTTP_400_BAD_REQUEST},
+    "ETP011": {"message": "Incorrect OTP", "staus_code": status.HTTP_400_BAD_REQUEST},
     "SOS176": {"message": "OTP expired", "status_code": status.HTTP_400_BAD_REQUEST},
     "SOS177": {"message": "Maximum OTP attempts exceeded", "status_code": status.HTTP_429_TOO_MANY_REQUESTS},
     "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
     "ERR541":{"message":"OTP either expired or not generated yet. Please reinitiate request again", "status_code": status.HTTP_400_BAD_REQUEST},
+    "ECB846": {"message":"Consumer not found in bureau","status_code": status.HTTP_400_BAD_REQUEST},
 
 }
 
