@@ -24,6 +24,7 @@ from controller.bsa_uploads import UploadHashMap
 from routes.gst_router import gst_router
 from routes.itr_router import itr_router
 from routes.kyc_router import kyc_router
+from routes.cibil_router import cibil_router
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ app.include_router(webhook_router)
 app.include_router(gst_router)
 app.include_router(itr_router)
 app.include_router(kyc_router)
+app.include_router(cibil_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))

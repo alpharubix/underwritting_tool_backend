@@ -2,7 +2,6 @@ import os
 from datetime import datetime, timezone, timedelta
 from json import JSONDecodeError
 from uuid import uuid4
-
 import httpx
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException
@@ -12,7 +11,7 @@ from starlette.responses import JSONResponse
 import config.config as config
 from config.config import KYC_FLOW_STATUS
 from custom_exceptions.scoreme_exceptions import raise_aadhaar_verification_exception, raise_aadhaar_otp_exception, \
-    raise_digilocker_url_exception, raise_digilocker_document_list_exception
+    raise_digilocker_url_exception, raise_digilocker_document_list_exception,raise_digilocker_document_url
 import logging
 
 from utils.error_codes_utility import AADHAAR_OTP_ERROR_MAP, DIGILOCKER_SESSION_STATUS_ERROR_MAP
@@ -636,7 +635,7 @@ async def fetch_documents_url(request):
 
         api_call_result = response.json()
 
-        raise_digilocker_document_list_exception(api_call_result)
+        raise_digilocker_document_url(api_call_result)
 
         if api_call_result.get("responseCode") == "SRC001":
 

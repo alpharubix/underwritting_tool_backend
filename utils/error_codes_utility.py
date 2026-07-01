@@ -458,5 +458,106 @@ DIGILOCKER_GET_DOCUMENT_ERROR_MAP = {
         "message": "No Information Found.",
         "status_code": 404,
         "data": {}
+    },
+    "EUA1655":{
+        "status_code": 400,
+        "message":"User access denied",
+        "data":{}
+
     }
+}
+
+CIBIL_BUREAU_GENERATE_OTP_ERROR_MAP = {
+    "EFL435": {
+        "status_code": 400,
+        "message": "First name and last name are mandatory."
+    },
+    "EDB439": {
+        "status_code": 400,
+        "message": "Invalid date of birth. Please provide the DOB in YYYY-MM-DD format."
+    },
+    "EGD444": {
+        "status_code": 400,
+        "message": "Invalid gender. Gender must be either 'M' or 'F'."
+    },
+    "EAD434": {
+        "status_code": 400,
+        "message": "Invalid address. Please provide a valid address."
+    },
+    "EID429": {
+        "status_code": 400,
+        "message": "Identity information is missing. Please provide a valid PAN, Passport, or Driving License."
+    },
+    "EID443": {
+        "status_code": 400,
+        "message": "Invalid identity format. Please verify the provided identity number."
+    },
+    "EDV515": {
+        "status_code": 400,
+        "message": "Data validation failed. Please verify the request payload."
+    },
+    "ECI419": {
+        "status_code": 500,
+        "message": "Credit Bureau service configuration error. Please try again later."
+    },
+    "EGD509": {
+        "status_code": 502,
+        "message": "Credit Bureau service is currently unavailable. Please try again later."
+    },
+    "EDB2012": {
+        "status_code": 400,
+        "message": "Invalid date of birth. Please provide the DOB in YYYY-MM-DD format."
+    },
+    "ESC2008": {
+            "status_code": 400,
+            "message":"Error in State code"
+        },
+    "EEP2007":{
+        "status_code": 400,
+        "message":"Error in Pincode"
+    },
+    "EIN2009":{
+        "status_code": 400,
+        "message":"Error in Identity Number"
+    },
+    "EMN2010":{
+        "status_code": 400,
+        "message":"Error in Mobile Number"
+    },
+    "ELL420":{
+        "status_code": 400,
+        "message":"Login attempts limit exceeded"
+    },
+    "EEA2006":{
+        "status_code": 400,
+        "message":"Error in Address"
+    }
+}
+
+CIBIL_VALIDATE_OTP_ERROR_MAP = {
+    "SOS175": {"message": "Invalid OTP", "staus_code": status.HTTP_400_BAD_REQUEST},
+    "SOS176": {"message": "OTP expired", "status_code": status.HTTP_400_BAD_REQUEST},
+    "SOS177": {"message": "Maximum OTP attempts exceeded", "status_code": status.HTTP_429_TOO_MANY_REQUESTS},
+    "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
+    "ERR541":{"message":"OTP either expired or not generated yet. Please reinitiate request again", "status_code": status.HTTP_400_BAD_REQUEST},
+
+}
+
+CIBIL_RESEND_OTP_ERROR_CODES = {
+    "SOS174": {
+        "status_code": 200,
+        "message": "OTP successfully sent to mobile number."
+    },
+    "ERU061": {
+        "status_code": 400,
+        "message": "OTP has already been verified."
+    },
+    "ECI419": {
+        "status_code": 500,
+        "message": "Credit Bureau service configuration error. Please try again later."
+    },
+    "EGD509": {
+        "status_code": 502,
+        "message": "Credit Bureau service is currently unavailable. Please try again later."
+    },
 }
