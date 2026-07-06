@@ -243,7 +243,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     }
 
 
-async def get_crm_bank_statement_report(db, acc_id: int):
+async def r1xcrm_bank_statement_report_consolidated(db, acc_id: int,from_date,to_date):
     if not acc_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -255,4 +255,4 @@ async def get_crm_bank_statement_report(db, acc_id: int):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"message": "account is not registered as user"}
         )
-    return await bank_statement_report_consolidated(db, user["_id"])
+    return await bank_statement_report_consolidated(db, user["_id"],from_date,to_date)
