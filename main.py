@@ -31,7 +31,7 @@ from routes.itr_router import itr_router
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
-async def connect_to_databases(app: FastAPI): #database first approch
+async def connect_to_databases(app: FastAPI): #database first approach
     try:
         postgres_conn = await get_postgres_conn()
         mongo_db = await get_mongo_db()
@@ -70,5 +70,5 @@ app.include_router(gst_router)
 app.include_router(itr_router)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
+    port = int(os.getenv("PORT", 5050))
     uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
