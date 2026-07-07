@@ -129,6 +129,7 @@ async def user_login(mongodb_connection, input_data: dict):
     try:
         email_id = input_data.get("email_id")
         password = input_data.get("password")
+        
 
         if not email_id or not password:
             raise HTTPException(
@@ -146,7 +147,7 @@ async def user_login(mongodb_connection, input_data: dict):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found please register"
             )
-
+        company_name = user.get("company_name") 
         auth = await auth_collection.find_one({"user_id":ObjectId(user['_id'])})
         print(auth['password_hash'])
 
@@ -165,7 +166,13 @@ async def user_login(mongodb_connection, input_data: dict):
             status_code=status.HTTP_200_OK,
             content={
                 "status": True,
-                "message": "Login successful"
+                "message": "Login successful",
+                "data": {
+                    "user_id": str(user["_id"]),
+                    "company_name": company_name,
+                    "email_id": email_id,
+                    "token": token
+                }
             }
         )
 
