@@ -2,7 +2,7 @@ from fastapi import APIRouter,Request
 from controller.banking_score_controller import get_available_banks,get_bank_parameter_controller, \
 	get_customer_profile_controller
 from controller.bank_statement_report import get_report_date_range
-from underwritting_tool_backend.controller.lending_eligibilty_controller import check_eligibility
+from controller.lending_eligibilty_controller import check_eligibility
 bank_scoring_router = APIRouter(prefix="/v1/bank-scoring",tags=["Bank scoring"])
 
 
