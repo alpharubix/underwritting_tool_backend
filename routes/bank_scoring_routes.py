@@ -1,7 +1,8 @@
-from fastapi import FastAPI,APIRouter,Request
-from controller.banking_score_controller import get_available_banks,get_bank_parameter_controller,analyse_date_range_controller,get_customer_profile_controller
+from fastapi import APIRouter,Request
+from controller.banking_score_controller import get_available_banks,get_bank_parameter_controller, \
+	get_customer_profile_controller
 from controller.bank_statement_report import get_report_date_range
-from services.eligibility_service import check_eligibility
+from controller.lender_eligibility_controller.lender_eligibility_check import check_eligibility
 bank_scoring_router = APIRouter(prefix="/v1/bank-scoring",tags=["Bank scoring"])
 
 
@@ -31,7 +32,7 @@ async def analyse_date_range(
 
 # API 4 - ELIGIBILITY CHECK FOR BANK SCORING
 
-@bank_scoring_router.post("/check-eligible")
+@bank_scoring_router.get("/check-eligibility")
 async def checkElgible(request:Request):
 	#payload = await request.json()
 	#customer_metrics = payload["customer_parameters"]
