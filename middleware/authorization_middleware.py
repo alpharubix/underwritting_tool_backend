@@ -10,6 +10,7 @@ from utils.auth_utility import get_decoded_jwt_token
 
 async def authorization(request: Request, call_next):
     try:
+        
         # Bypass OPTIONS and Public Routes
         public_patterns = [
             r"^/v1/bsa/crm-bsa-statement-report/\w+$",
@@ -43,6 +44,8 @@ async def authorization(request: Request, call_next):
             decoded_jwt_token = get_decoded_jwt_token(token)
             request.state.user_id = decoded_jwt_token['user_id']
             request.state.role = decoded_jwt_token['role']
+            user= request.state.user_id
+            print(f"User ID from middleware: {user}")
         except Exception:
             return JSONResponse(status_code=401, content={'message': 'Invalid Token'})
 
