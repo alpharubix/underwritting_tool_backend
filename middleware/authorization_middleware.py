@@ -27,6 +27,10 @@ async def authorization(request: Request, call_next):
             r"^/v1/bsa/r1xcrm-cashflow/\d+$",
             r"^/v1/bsa/r1xcrm-month-wise-overview/\d+$",
             r"^/v1/bsa/r1xcrm-report-date-range/\d+$",
+            r"^/v1/itr/r1xcrm-tax-calculation/\d+$",
+            r"^/v1/itr/r1xcrm-balance_sheet/\d+$",
+            r"^/v1/itr/r1xcrm-profit-and-loss-statement/\d+$",
+            r"^/v1/itr/r1xcrm-ratio-analysis/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
         ]
