@@ -522,9 +522,8 @@ async def gst_ref_id_status(request: Request)->JSONResponse:
 
 
 
-async def get_all_user_ref_ids(request: Request)->JSONResponse:
+async def get_all_user_ref_ids(request: Request,user_id:str)->JSONResponse:
     try:
-        user_id = request.state.user_id
 
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
 
@@ -542,6 +541,24 @@ async def get_all_user_ref_ids(request: Request)->JSONResponse:
         logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
+
+async def get_r1xcrm_gst_ref_id_status(request: Request,acc_id:int)->JSONResponse:
+    try:
+        db = request.app.state.mongo_db
+
+        user = await db["users"].find_one({"account_id":acc_id})
+
+        if not user:
+            raise HTTPException(status_code=404, detail={"message": "No user found for this account id"})
+
+        return await get_all_user_ref_ids(request,user_id=str(user["_id"]))
+    
+    except HTTPException as e:
+        logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
+        raise e
+    except Exception as e:
+        logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
 
@@ -626,7 +643,6 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase,b
 
 
 async def get_overview_and_account_details(request:Request)->JSONResponse:
-
     try:
         input_data = await request.json()
     except JSONDecodeError as e:
@@ -680,6 +696,15 @@ async def get_overview_and_account_details(request:Request)->JSONResponse:
             "data": overview,
         }
     )
+
+async def get_r1xcrm_overview(request:Request)->JSONResponse:
+    try:
+        return await get_overview_and_account_details(request)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
 async def get_top_suppliers_and_customers(request:Request)->JSONResponse:
     try:
         input_data = await request.json()
@@ -714,6 +739,13 @@ async def get_top_suppliers_and_customers(request:Request)->JSONResponse:
 
     return JSONResponse(status_code=200, content={"message":"Top 10 suppliers and customers fetched successfully","data": suppliers_and_customers})
 
+async def get_r1xcrm_top_suppliers_and_customers(request:Request)->JSONResponse:
+    try:
+        return await get_top_suppliers_and_customers(request)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 async def get_monthly_sales_and_purchase_summary(request: Request) -> JSONResponse:
     try:
@@ -780,9 +812,13 @@ async def get_monthly_sales_and_purchase_summary(request: Request) -> JSONRespon
     )
 
 
-
-
-
+async def get_r1xcrm_monthly_sales_purchase_summary(request:Request) -> JSONResponse:
+    try:
+        return await get_monthly_sales_and_purchase_summary(request)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
 
