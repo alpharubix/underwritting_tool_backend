@@ -1,5 +1,5 @@
 from fastapi import APIRouter,Request
-from controller.banking_score_controller import get_available_banks,get_bank_parameter_controller, \
+from controller.banking_score_controller import add_parsed_month_date, get_available_banks,get_bank_parameter_controller, \
 	get_customer_profile_controller
 from controller.bank_statement_report import get_report_date_range
 from controller.lending_eligibilty_controller import check_eligibility
@@ -46,3 +46,21 @@ async def get_customer_profile(
     request:Request
 ):
     return await get_customer_profile_controller(request)
+
+@bank_scoring_router.post("/migrate/parsed-month-date")
+async def migrate(request: Request):
+
+    await add_parsed_month_date(request.app.state.mongo_db)
+
+    return {
+        "message": "Migration completed"
+	}
+
+@bank_scoring_router.post("/bank-parse-migration")
+async def migrate_bank_parse(request: Request):
+	db = request.app.state.mongo_db
+	await add_parsed_month_date(db)
+
+	return {
+		"message": "Migration completed"
+	}

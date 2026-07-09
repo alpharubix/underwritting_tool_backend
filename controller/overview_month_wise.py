@@ -11,6 +11,14 @@ from utils.scale_to_laksh import _scale_to_lakhs
 
 logger = logging.getLogger(__name__)
 
+# Month abbreviations as produced by Python's "%b" strftime (English/C locale).
+# Used to translate each row's "Mon YYYY" Month string (e.g. "Jan 2024") into
+# a real BSON date inside the aggregation pipeline. MongoDB's $dateFromString
+# does not support %b/%B (named-month) format specifiers, so we look the
+# abbreviation up ourselves and build the date with $dateFromParts instead.
+_MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
 
 def _safe_div(numerator, denominator, multiply=1, round_to=2):
     if not denominator:
@@ -28,7 +36,40 @@ def _safe_decimal(val: Any) -> Decimal:
         return Decimal(str(val))
     except (InvalidOperation, ValueError, TypeError):
         return Decimal("0")
-    
+
+
+def _build_month_filter_cond(from_dt, to_dt):
+    """
+    Builds the $filter `cond` expression used inside the aggregation
+    pipeline to keep only the OverView rows whose Month ("Mon YYYY", e.g.
+    "Jan 2024") falls within [from_dt, to_dt].
+
+    Each row's Month string is reconstructed into a real Date (day fixed at
+    1) via $dateFromParts, then compared with >= / <=. This mirrors the
+    previous Python-side behavior of datetime.strptime(m, "%b %Y") exactly,
+    including the fact that a from_dt of e.g. 2024-01-15 still excludes the
+    "Jan 2024" row (its reconstructed date is 2024-01-01, which is earlier
+    than 2024-01-15).
+
+    Returns the literal True when no bounds are given, so $filter keeps
+    every row untouched (same as skipping the filter entirely).
+    """
+    if not from_dt and not to_dt:
+        return True
+
+    month_abbr = {"$substrCP": ["$$row.Month", 0, 3]}
+    year_num = {"$toInt": {"$substrCP": ["$$row.Month", 4, 4]}}
+    month_num = {"$add": [{"$indexOfArray": [_MONTH_ABBR, month_abbr]}, 1]}
+    row_date = {"$dateFromParts": {"year": year_num, "month": month_num, "day": 1}}
+
+    clauses = []
+    if from_dt:
+        clauses.append({"$gte": [row_date, from_dt]})
+    if to_dt:
+        clauses.append({"$lte": [row_date, to_dt]})
+
+    return clauses[0] if len(clauses) == 1 else {"$and": clauses}
+
 
 def _compute_report(monthly_rows: list) -> dict:
     """All aggregation done in Python from pre-aggregated monthly rows."""
@@ -167,63 +208,65 @@ def _compute_report(monthly_rows: list) -> dict:
     }
 
 
-async def bank_statement_report_consolidated(db, user_id: str, from_date: str = None, to_date: str = None):
-    print(f"DEBUG: Searching for user_id: '{user_id}' type: {type(user_id)}")
+async def bank_statement_report_consolidated_oldVersion(db, user_id: str, from_date: str = None, to_date: str = None):
     logger.info("bank_statement_report.start | user_id=%s", user_id)
-    
     start_time = time.perf_counter()
-    raw_debug = await db.bsa_merged_bankstatements.find_one({"user_id": str(user_id)})    
-    # ONE DB call — fetch only what we need
-    doc = await db.bsa_merged_bankstatements.find_one(
-        {"user_id": str(user_id)},
-        projection={
-            "merged_reference_id": 1,
-            "analysis_metadata.Data.OverView": 1,
-            "_id": 0,
-        } 
-    )
 
-    if not doc:
+    from_dt = datetime.strptime(from_date, "%Y-%m-%d") if from_date else None
+    to_dt   = datetime.strptime(to_date,   "%Y-%m-%d") if to_date   else None
+
+    # Optimized flow: $match(user_id) -> $project(required fields) ->
+    # $filter(parsedMonthDate) -> only the required months ever leave Mongo.
+    pipeline = [
+        {"$match": {"user_id": str(user_id)}},
+        {"$project": {
+            "_id": 0,
+            "merged_reference_id": 1,
+            "OverView": {"$ifNull": ["$analysis_metadata.Data.OverView", []]},
+        }},
+        {"$addFields": {
+            # Count BEFORE filtering, so we can still tell "no overview data
+            # at all" apart from "no rows in the requested date range".
+            "OverViewCount": {"$size": "$OverView"},
+            "OverView": {
+                "$filter": {
+                    "input": "$OverView",
+                    "as": "row",
+                    "cond": _build_month_filter_cond(from_dt, to_dt),
+                }
+            },
+        }},
+    ]
+
+    cursor = db.bsa_merged_bankstatements.aggregate(pipeline)
+    results = await cursor.to_list(length=1)
+
+    if not results:
         logger.warning("bank_statement_report.not_found | user_id=%s", user_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "bank_statement_report not found for this account"}
         )
 
-    monthly_rows: list = doc.get("analysis_metadata", {}).get("Data", {}).get("OverView", [])
+    doc = results[0]
 
-    if not monthly_rows:
+    if doc.get("OverViewCount", 0) == 0:
         logger.warning("bank_statement_report.empty_overview | user_id=%s", user_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "No monthly overview data found"}
         )
 
-    # Date filter in Python
-    if from_date or to_date:
-        
+    monthly_rows: list = doc.get("OverView", [])
 
-        def parse_month(m: str):
-            return datetime.strptime(m, "%b %Y")
+    if (from_dt or to_dt) and not monthly_rows:
+        logger.warning("bank_statement_report.no_rows_in_range | user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "No data found for the given date range"}
+        )
 
-        from_dt = datetime.strptime(from_date, "%Y-%m-%d") if from_date else None
-        to_dt   = datetime.strptime(to_date,   "%Y-%m-%d") if to_date   else None
-
-        monthly_rows = [
-            r for r in monthly_rows
-            if (from_dt is None or parse_month(r["Month"]) >= from_dt)
-            and (to_dt is None or parse_month(r["Month"]) <= to_dt)
-        ]
-        print(monthly_rows)
-        if not monthly_rows:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"message": "No data found for the given date range"}
-            )
-
-    
-    
-    #  All math in Python
+    # All math in Python
     consolidated = _compute_report(monthly_rows)
     # consolidated.update({
     #     "reference_id": doc.get("merged_reference_id",[]),
@@ -256,3 +299,136 @@ async def get_crm_bank_statement_report(db, acc_id: int):
             detail={"message": "account is not registered as user"}
         )
     return await bank_statement_report_consolidated(db, user["_id"])
+
+
+#######################################################
+#Below code is the optimized for monthly overview (3rd module) - PrathamPai2004 :
+########################################################
+
+
+async def bank_statement_report_consolidated(db, user_id: str, from_date: str = None, to_date: str = None):
+    logger.info("bank_statement_report.start | user_id=%s", user_id)
+    start_time = time.perf_counter()
+
+    from_dt = (
+    datetime.strptime(from_date, "%Y-%m-%d")
+    .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if from_date else None
+    )
+
+    to_dt = (
+        datetime.strptime(to_date, "%Y-%m-%d")
+        .replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if to_date else None
+    )
+
+    filter_conditions = []
+
+    if from_dt:
+        filter_conditions.append({
+            "$gte": [
+                "$$row.parsedMonthDate",
+                from_dt
+            ]
+        })
+
+    if to_dt:
+        filter_conditions.append({
+            "$lte": [
+                "$$row.parsedMonthDate",
+                to_dt
+            ]
+        })
+
+    filter_expression = (
+        {"$and": filter_conditions}
+        if filter_conditions
+        else True
+    )
+    # Optimized flow: $match(user_id) -> $project(required fields) ->
+    # $filter(parsedMonthDate) -> only the required months ever leave Mongo.
+    pipeline = [
+        {"$match": {"user_id": str(user_id)}},
+        {"$project": {
+            "_id": 0,
+            "merged_reference_id": 1,
+            "OverView": {"$ifNull": ["$analysis_metadata.Data.OverView", []]},
+        }},
+        {
+            "$addFields": {
+            # Count BEFORE filtering, so we can still tell "no overview data
+            # at all" apart from "no rows in the requested date range".
+            "OverViewCount": {"$size": "$OverView"},
+            "OverView": {
+                "$filter": {
+                    "input": "$OverView",
+                    "as": "row",
+                    "cond": filter_expression
+            },
+        }
+        }
+        }
+    ]
+
+    cursor = db.bsa_merged_bankstatements.aggregate(pipeline)
+    results = await cursor.to_list(length=1)
+
+    if not results:
+        logger.warning("bank_statement_report.not_found | user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "bank_statement_report not found for this account"}
+        )
+
+    doc = results[0]
+
+    if doc.get("OverViewCount", 0) == 0:
+        logger.warning("bank_statement_report.empty_overview | user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "No monthly overview data found"}
+        )
+
+    monthly_rows: list = doc.get("OverView", [])
+
+    if (from_dt or to_dt) and not monthly_rows:
+        logger.warning("bank_statement_report.no_rows_in_range | user_id=%s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"message": "No data found for the given date range"}
+        )
+
+    # All math in Python
+    consolidated = _compute_report(monthly_rows)
+    # consolidated.update({
+    #     "reference_id": doc.get("merged_reference_id",[]),
+    #     "user_id":      str(user_id),
+    #     "report_count": 1,
+    # })
+    cleaned_rows = []
+    for r in monthly_rows:
+        # This replaces any None with 0.0 for all fields in the row
+        cleaned_rows.append({k: (v if v is not None else 0.0) for k, v in r.items()})
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    logger.info("bank_statement_report.success | user_id=%s | duration_ms=%.2f", user_id, elapsed_ms)
+
+    return {
+        "consolidated_overall_report": consolidated,
+        "monthly_breakdown": cleaned_rows,
+    }
+
+
+async def get_crm_bank_statement_report(db, acc_id: int):
+    if not acc_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "account id is required"}
+        )
+    user = await db["users"].find_one({"account_id": acc_id})
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "account is not registered as user"}
+        )
+    return await bank_statement_report_consolidated(db, user["_id"])
+

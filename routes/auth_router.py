@@ -100,3 +100,4 @@ async def reset_password(request: Request):
         raise HTTPException(status_code=400, detail="Invalid request body")
     except HTTPException as e:
         raise e
+
