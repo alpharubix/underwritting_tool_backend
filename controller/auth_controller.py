@@ -434,10 +434,34 @@ async def reset_password_(reset_token: str, new_password: str, mongodb_connectio
         )
 
 
+async def check_r1xchange_account_controller(acc_id:str,request):
+    
+    mongodb_connection = request.app.state.mongo_db
+    
+    try:
+        user_collection = mongodb_connection["users"]
+        user = await user_collection.find_one(
+            {"account_id": acc_id},
+            {
+                "_id": 0,
+                "login_id": 1,
+                "email": 1,
+                "customer_name": 1,
+                "phone": 1,
+                "company_name": 1,
+                "gst_number": 1,
+                "status": 1
+            })
 
+        if not user:
+           raise HTTPException(status_code=status.HTTP_204_NO_CONTENT, detail="Requested User Not Found please contact admin for support")
 
-
-
-
-
-
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "success","user_exist":True, "data": user})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Error in get_current_user:", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error please contact admin for support"
+        )
