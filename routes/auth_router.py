@@ -103,7 +103,7 @@ async def reset_password(request: Request):
 
 
 
-# checking r1xchange account id is there or not 
+# checking r1xchange account id is there or not
 
 @auth_router.get("/check-r1xchange-account/{acc_id}")
 async def check_r1xchange_account(request: Request,acc_id:int):
