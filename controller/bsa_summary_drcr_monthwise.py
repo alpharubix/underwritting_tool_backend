@@ -1176,3 +1176,18 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
         )
 
 
+
+async def get_r1xcrm_summary_of_debit_and_credit_monthwise(db,acc_id: int,from_date,to_date) -> dict:
+    if not acc_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "account id is required"}
+        )
+    user = await db["users"].find_one({"account_id": acc_id})
+    print(user["_id"])
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "account is not registered as user"}
+        )
+    return await bsa_summary_of_debit_credit_monthwise(db, str(user["_id"]),from_date,to_date)

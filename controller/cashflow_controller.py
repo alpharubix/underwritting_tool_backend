@@ -865,3 +865,24 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         }  
 
         }
+
+
+async def r1xcrm_build_cashflow_report(db, acc_id: int, from_month: str, to_month: str):
+    user_collection = db["users"]
+
+    user = await user_collection.find_one(
+        {"account_id": acc_id},
+        {"_id": 1}
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
+
+    user_id = str(user["_id"])  # or keep it as ObjectId depending on your DB
+
+    print(user_id,"user_id")
+
+    return await build_cashflow_report(db,user_id,from_month,to_month)
