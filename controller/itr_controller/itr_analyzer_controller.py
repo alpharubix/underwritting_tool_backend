@@ -412,9 +412,8 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def get_tax_calculation(request: Request) -> JSONResponse:
+async def get_tax_calculation(request: Request,user_id:str) -> JSONResponse:
     try:
-        user_id = request.state.user_id
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
 
@@ -479,10 +478,24 @@ async def get_tax_calculation(request: Request) -> JSONResponse:
             detail=str(e)
         )
 
+async def get_r1xcrm_tax_calculation(request: Request,acc_id:int)->JSONResponse:
+    db = request.app.state.mongo_db
+    if not acc_id:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account ID is required"
+        )
+    user = await db["users"].find_one({"account_id":acc_id})
+    if not user:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return await get_tax_calculation(request,str(user["_id"]))
 
-async def get_balance_sheet(request: Request) -> JSONResponse:
+async def get_balance_sheet(request: Request,user_id:str) -> JSONResponse:
     try:
-        user_id = request.state.user_id
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
 
@@ -544,9 +557,24 @@ async def get_balance_sheet(request: Request) -> JSONResponse:
             detail=str(e)
         )
 
-async def get_profit_and_loss_statement(request: Request) -> JSONResponse:
+async def get_r1xcrm_balance_sheet(request:Request,acc_id:int)->JSONResponse:
+    db = request.app.state.mongo_db
+    if not acc_id:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account ID is required"
+        )
+    user = await db["users"].find_one({"account_id":acc_id})
+    if not user:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return await get_balance_sheet(request,str(user["_id"]))
+
+async def get_profit_and_loss_statement(request: Request,user_id:str) -> JSONResponse:
     try:
-        user_id = request.state.user_id
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
 
@@ -611,10 +639,24 @@ async def get_profit_and_loss_statement(request: Request) -> JSONResponse:
             detail=str(e)
         )
 
+async def get_r1xcrm_profit_and_loss_statement(request:Request,acc_id:int)->JSONResponse:
+    db = request.app.state.mongo_db
+    if not acc_id:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account ID is required"
+        )
+    user = await db["users"].find_one({"account_id":acc_id})
+    if not user:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return await get_profit_and_loss_statement(request,str(user["_id"]))
 
-async def get_ratio_analysis(request: Request) -> JSONResponse:
+async def get_ratio_analysis(request: Request,user_id:str) -> JSONResponse:
     try:
-        user_id = request.state.user_id
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
 
@@ -678,3 +720,19 @@ async def get_ratio_analysis(request: Request) -> JSONResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
+    db = request.app.state.mongo_db
+    if not acc_id:
+        return HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Account ID is required"
+        )
+    user = await db["users"].find_one({"account_id":acc_id})
+    if not user:
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return await get_ratio_analysis(request,str(user["_id"]))

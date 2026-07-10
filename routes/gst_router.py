@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException
 from starlette.requests import Request
 from controller.gst_contoller.gst_analyser_controller import get_gstin, update_gstin, get_gstin_basic_info, get_gst_otp, \
     validate_gst_otp_info, send_gstin_to_score_me, gst_ref_id_status, get_all_user_ref_ids, \
-    get_overview_and_account_details, get_top_suppliers_and_customers,get_monthly_sales_and_purchase_summary
+    get_overview_and_account_details, get_top_suppliers_and_customers,get_monthly_sales_and_purchase_summary, \
+    get_r1xcrm_gst_ref_id_status, get_r1xcrm_overview, get_r1xcrm_top_suppliers_and_customers, get_r1xcrm_monthly_sales_purchase_summary
 
 gst_router = APIRouter(prefix="/v1/gst", tags=["gst"])
 
@@ -61,7 +62,15 @@ async def get_gst_ref_status(request: Request):
 @gst_router.get("/users-ref-ids")
 async def get_user_ref_id(request: Request):
     try:
-        return await get_all_user_ref_ids(request)
+        user_id = request.state.user_id
+        return await get_all_user_ref_ids(request,user_id)
+    except HTTPException as e:
+        raise e
+
+@gst_router.get("/r1xcrm-gst-ref-status/{acc_id}")
+async def r1xcrm_get_gst_ref_status(request: Request,acc_id:int):
+    try:
+        return await get_r1xcrm_gst_ref_id_status(request,acc_id)
     except HTTPException as e:
         raise e
 
@@ -72,10 +81,24 @@ async def overview(request: Request):
     except HTTPException as e:
         raise e
 
+@gst_router.post("/r1xcrm-overview")
+async def r1xcrm_overview(request: Request):
+    try:
+        return await get_r1xcrm_overview(request)
+    except HTTPException as e:
+        raise e
+
 @gst_router.post("/top-suppliers-and-customers")
 async def top_suppliers_and_customers(request: Request):
     try:
         return await get_top_suppliers_and_customers(request)
+    except HTTPException as e:
+        raise e
+
+@gst_router.post("/r1xcrm-top-suppliers-and-customers")
+async def r1xcrm_top_suppliers_and_customers(request: Request):
+    try:
+        return await get_r1xcrm_top_suppliers_and_customers(request)
     except HTTPException as e:
         raise e
 
@@ -86,3 +109,10 @@ async def monthly_sales_purchase_summary(request: Request):
     except HTTPException as e:
         raise e
 
+
+@gst_router.post("/r1xcrm-monthly-sales-purchase-summary")
+async def r1xcrm_monthly_sales_purchase_summary(request: Request):
+    try:
+        return await get_r1xcrm_monthly_sales_purchase_summary(request)
+    except HTTPException as e:
+        raise e
