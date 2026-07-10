@@ -103,6 +103,8 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
                 request.app.state.mongo_db,
                 request.app.state.postgres_conn,
             )
+            #update the merge status once the merge request is successfully merged
+            await mongodb_connection["bsa_reference"].update_one({"reference_id": reference_id}, {"$set": {"merge_request_status":"COMPLETED"}})
             return {"status": "success", "message": "Merge result received — report ingestion started"}
 
         merge_status = await is_reference_id_mergable(

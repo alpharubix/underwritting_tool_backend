@@ -588,8 +588,14 @@ async def get_crm_bank_statement_report(db,acc_id:int):
 
 async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
     try:
-        doc = await db.bsa_merged_bankstatements.find_one({'user_id': user_id})
-
+        doc = await db.bsa_merged_bankstatements.find_one(
+            {"user_id":user_id},
+            {
+                "_id":0,
+                "from_date":1,
+                "to_date":1
+            }
+        )
         if not doc:
 
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={"message":"No date range found for this user"})

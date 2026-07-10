@@ -13,6 +13,7 @@ async def get_current_user(user_id, mongodb_connection:AsyncIOMotorClient)->dict
             {
                 "_id": 0,
                 "login_id": 1,
+                "user_id":user_id,
                 "email": 1,
                 "customer_name": 1,
                 "phone": 1,

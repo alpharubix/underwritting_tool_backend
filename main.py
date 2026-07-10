@@ -7,6 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 import asyncio
 
 from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
+from routes.bank_scoring_routes import bank_scoring_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,7 +32,7 @@ from routes.itr_router import itr_router
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
-async def connect_to_databases(app: FastAPI): #database first approach
+async def connect_to_databases(app: FastAPI): #database first approch
     try:
         postgres_conn = await get_postgres_conn()
         mongo_db = await get_mongo_db()
@@ -69,6 +70,8 @@ app.include_router(gst_router)
 
 app.include_router(itr_router)
 
+app.include_router(bank_scoring_router)
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5050))
+    port = int(os.getenv("PORT", 8080))
     uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
