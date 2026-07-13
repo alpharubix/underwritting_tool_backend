@@ -73,3 +73,9 @@ class CibilOTPStatus(str, Enum):
     PENDING = "PENDING"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+class CibilWebhookStatus(Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"

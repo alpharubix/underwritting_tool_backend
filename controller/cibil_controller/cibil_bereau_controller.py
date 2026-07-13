@@ -6,7 +6,7 @@ import httpx
 from fastapi.responses import JSONResponse
 from starlette import status
 from config.config import SCOREME_GENERATE_CIBIL_OTP_URL, CibilOTPStatus, SCOREME_VALIDATE_CIBIL_OTP_URL, \
-    SCOREME_RESEND_CIBIL_OTP_URL
+    SCOREME_RESEND_CIBIL_OTP_URL,CibilWebhookStatus
 from custom_exceptions.scoreme_exceptions import raise_cibil_otp_exception, raise_cibil_validate_otp_exception, \
     raise_cibil_resend_otp_exception
 from dotenv import load_dotenv
@@ -88,6 +88,7 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
                 "verification_attempts": 0,
                 "resend_attempts": 0,
                 "webhook_message":None,
+                "webhook_status":CibilWebhookStatus.PENDING.value,
                 "created_at":datetime.now(timezone.utc),
                 "updated_at":datetime.now(timezone.utc)
 
@@ -473,14 +474,14 @@ async def cibil_webhook_consumer(request):
         otp_manager = mongo_db["cibil_otp_manager"]
 
         # Common function to update webhook message
-        async def update_webhook_message():
+        async def update_webhook_message(webhook_status=CibilWebhookStatus.PENDING.value):
             await otp_manager.update_one(
                 {"reference_id": reference_id},
-                {"$set": {"webhook_message": message}},
+                {"$set": {"webhook_message": message,"webhook_status":webhook_status}},
             )
 
         if response_code == "EOV841":
-            await update_webhook_message()
+            await update_webhook_message(webhook_status=CibilWebhookStatus.FAILED.value)
 
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
@@ -492,6 +493,7 @@ async def cibil_webhook_consumer(request):
             )
 
         if response_code != "SRC001":
+            await update_webhook_message(webhook_status=CibilWebhookStatus.FAILED.value)
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
                 content={
@@ -546,15 +548,16 @@ async def cibil_webhook_consumer(request):
         cibil_report = {
             "user_id": cibil_otp_doc["user_id"],
             "reference_id": reference_id,
-            "cibil_report": response.json(),
+            "cibil_report":response.json(),
             "cibil_pulled_date": datetime.now(timezone.utc),
+            "source_urls":data,
             "created_at": datetime.now(timezone.utc),
             "updated_at": None,
         }
 
         await mongo_db["cibil_report"].insert_one(cibil_report)
 
-        await update_webhook_message()
+        await update_webhook_message(webhook_status=CibilWebhookStatus.SUCCESS.value)
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -574,11 +577,275 @@ async def cibil_webhook_consumer(request):
             },
         )
 
+async def get_list_cibil_reports(request) :
+    try:
+        mongo_db = request.app.state.mongo_db
+
+        user_id = request.state.user_id
+
+        cibil_report_collection = mongo_db["cibil_report"]
+
+        cursor = cibil_report_collection.find(
+            {"user_id": user_id},
+            {"_id": 0, "reference_id": 1, "cibil_pulled_date": 1}
+        )
+
+        list_cibil_reports = await cursor.to_list(length=None)
+
+        for cibil_report in list_cibil_reports:
+            cibil_report["cibil_pulled_date"] = cibil_report["cibil_pulled_date"].isoformat()
+
+        print(list_cibil_reports)
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Cibil report list fetched successfully",
+                "data": list_cibil_reports,
+                "responseCode": "SYS_OK",
+            },
+        )
+    except Exception as err:
+        print("Error in get_list_cibil_reports",err)
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error contact the admin for support","data":None,"responseCode":"SYS_INT_ERR"})
 
 
 
+async def cibil_overview(reference_id: str, request):
+    try:
+        mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
+
+        cibil_report = await mongo_db["cibil_report"].find_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            },
+            {
+                "_id": 0,
+                "reference_id": 1,
+                "cibil_pulled_date": 1,
+                "cibil_report.EquifaxRetail.BureauAnalysis": 1,
+                "cibil_report.EquifaxRetail.generalInfo": 1,
+            },
+        )
 
 
+        if cibil_report is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "message": "CIBIL report not found",
+                    "data": None,
+                    "responseCode": "SYS_NOT_FOUND",
+                },
+            )
+
+        cibil_report["cibil_pulled_date"] = cibil_report["cibil_pulled_date"].isoformat()
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Overview fetched successfully",
+                "data": cibil_report,
+                "responseCode": "SYS_OK",
+            },
+        )
+
+    except Exception as e:
+        print("Error in get_cibil_overview:", e)
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
+
+async def account_summary(reference_id: str, request ):
+    try:
+        mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
+
+        cibil_report = await mongo_db["cibil_report"].find_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            },
+            {
+                "_id": 0,
+                "reference_id": 1,
+                "cibil_report.EquifaxRetail.accountSummary": 1,
+            },
+        )
+
+        if cibil_report is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "message": "CIBIL report not found",
+                    "data": None,
+                    "responseCode": "CBL_NOT_FOUND",
+                },
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Account summary fetched successfully",
+                "data": cibil_report,
+                "responseCode": "SYS_OK",
+            },
+        )
+
+    except Exception as e:
+        print("Error in get_cibil_account_summary:", e)
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
+
+async def payment_history(reference_id: str, request):
+    try:
+        mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
+
+        cibil_report = await mongo_db["cibil_report"].find_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            },
+            {
+                "_id": 0,
+                "reference_id": 1,
+                "cibil_report.EquifaxRetail.activeAccountRepaymentTrack": 1,
+                "cibil_report.EquifaxRetail.closedAccountRepaymentTrack": 1,
+            },
+        )
+
+        if cibil_report is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "message": "CIBIL report not found",
+                    "data": None,
+                    "responseCode": "CBL_NOT_FOUND",
+                },
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Payment history fetched successfully",
+                "data": cibil_report,
+                "responseCode": "SYS_OK",
+            },
+        )
+
+    except Exception as e:
+        print("Error in get_cibil_payment_history:", e)
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
+
+
+async def analysis(reference_id: str, request):
+    try:
+        mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
+
+        cibil_report = await mongo_db["cibil_report"].find_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+            },
+            {
+                "_id": 0,
+                "reference_id": 1,
+                "cibil_report.EquifaxRetail.ScoremeAnalysis": 1,
+            },
+        )
+
+        if cibil_report is None:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "message": "CIBIL report not found",
+                    "data": None,
+                    "responseCode": "CBL_NOT_FOUND",
+                },
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Analysis fetched successfully",
+                "data": cibil_report,
+                "responseCode": "SYS_OK",
+            },
+        )
+
+    except Exception as e:
+        print("Error in get_cibil_analysis:", e)
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
+
+async def otp_flow_id_webhook_status(otp_flow_id,request):
+    try:
+        mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
+        report_status = CibilWebhookStatus.IN_PROGRESS
+
+        webhook_status = await mongo_db["cibil_otp_manager"].find_one({"user_id": user_id,"otp_flow_id":otp_flow_id},{"webhook_status":1})
+
+        if webhook_status :
+            if webhook_status["webhook_status"] == CibilWebhookStatus.PENDING.value:
+                report_status = CibilWebhookStatus.IN_PROGRESS.value
+            elif webhook_status["webhook_status"] == CibilWebhookStatus.SUCCESS.value:
+                report_status = CibilWebhookStatus.SUCCESS.value
+            elif webhook_status["webhook_status"] == CibilWebhookStatus.FAILED.value:
+                report_status = CibilWebhookStatus.FAILED.value
+
+        else:
+
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid otp_flow_id","data":None,"responseCode":"SYS_INPUT_ERR"},
+            )
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,content={"message":"Otp webhook status fetched successdfully","data":{"webhook_status":report_status},"responseCode":"SYS_OK"},
+        )
+    except Exception as e:
+        print("Error in get_cibil_analysis:", e)
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
 
 
 
