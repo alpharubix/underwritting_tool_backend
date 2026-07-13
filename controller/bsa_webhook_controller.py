@@ -49,6 +49,20 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url):
                         entry["parsedMonthDate"] = datetime.strptime("01 " + month_str, "%d %b %Y")
                     except ValueError:
                         pass
+            for entry in analysis_metadata.get("Data", {}).get("Cash Flow", []):
+                month_str = entry.get("MonthYear", "")
+                if month_str:
+                    try:
+                        entry["parsedMonthDate"] = datetime.strptime("01 " + month_str, "%d %b %Y")
+                    except ValueError:
+                        pass
+            for entry in analysis_metadata.get("Data", {}).get("OverView", []):
+                month_str = entry.get("Month", "")
+                if month_str:
+                    try:
+                        entry["parsedMonthDate"] = datetime.strptime("01 " + month_str, "%d %b %Y")
+                    except ValueError:
+                        pass
 
             await db["bsa_merged_bankstatements"].update_one(
                 {
@@ -157,7 +171,6 @@ async def merge_reference_ids(
 
     if response.status_code != 200:
         raise Exception(f"Merge API failed: {response.text}")
-
     scoreme_response = response.json()
 
     new_reference_id = scoreme_response.get("data", {}).get("referenceId")

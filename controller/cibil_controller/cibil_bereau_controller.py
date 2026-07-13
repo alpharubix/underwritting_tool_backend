@@ -85,9 +85,9 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
                 "reference_id":api_response.get("data").get("referenceId"),
                 "otp_status":CibilOTPStatus.OTP_SENT.value,
                 "otp_generated_at":datetime.now(timezone.utc),
-                "expires_at":datetime.now(timezone.utc)+timedelta(minutes=5),
                 "verification_attempts": 0,
                 "resend_attempts": 0,
+                "webhook_message":None,
                 "created_at":datetime.now(timezone.utc),
                 "updated_at":datetime.now(timezone.utc)
 
@@ -171,26 +171,25 @@ async def validate_cibil_otp(request):
                     "responseCode": "ERU061",
                 },
             )
-        expires_at = otp_document["expires_at"].replace(tzinfo=timezone.utc)
-        if datetime.now(timezone.utc) > expires_at: #expiry check
-            await coll.update_one(
-                {"_id": otp_document["_id"]},
-                {
-                    "$set": {
-                        "otp_status": CibilOTPStatus.OTP_EXPIRED.value,
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                },
-            )
-
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "message": "OTP has expired.",
-                    "data": None,
-                    "responseCode": "SYS_OTP_EXPIRED",
-                },
-            )
+        # if datetime.now(timezone.utc) > expires_at: #expiry check
+        #     await coll.update_one(
+        #         {"_id": otp_document["_id"]},
+        #         {
+        #             "$set": {
+        #                 "otp_status": CibilOTPStatus.OTP_EXPIRED.value,
+        #                 "updated_at": datetime.now(timezone.utc),
+        #             }
+        #         },
+        #     )
+        #
+        #     return JSONResponse(
+        #         status_code=status.HTTP_400_BAD_REQUEST,
+        #         content={
+        #             "message": "OTP has expired.",
+        #             "data": None,
+        #             "responseCode": "SYS_OTP_EXPIRED",
+        #         },
+        #     )
 
         if otp_document["verification_attempts"] >= 3: #total attempts check
             return JSONResponse(
@@ -274,17 +273,6 @@ async def validate_cibil_otp(request):
                     }
                 },
             )
-        else:
-            await coll.update_one(
-                {"_id": otp_document["_id"]},
-                {
-                    "$set": {
-                        "otp_status": CibilOTPStatus.FAILED.value,
-                        "updated_at": datetime.now(timezone.utc),
-                    }
-                })
-
-
         return raise_cibil_validate_otp_exception(api_response)
 
     except Exception as e:
@@ -355,7 +343,7 @@ async def resend_cibil_otp(request):
             )
 
         # Already verified
-        if otp_document["otp_status"] == CibilOTPStatus.OTP_VERIFIED.value: #guard clause that protects the resend end api consumption
+        if otp_document["otp_status"] == CibilOTPStatus.OTP_VERIFIED.value:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -364,7 +352,6 @@ async def resend_cibil_otp(request):
                     "responseCode": "ERU061",
                 },
             )
-
 
         # Maximum resend limit
         if otp_document["resend_attempts"] >= 3:
@@ -392,6 +379,7 @@ async def resend_cibil_otp(request):
                     json=normalized_payload,
                     timeout=20,
                 )
+
             print("Reached after API call")
             print("Status:", response.status_code)
             print("Body:", response.text)
@@ -410,19 +398,18 @@ async def resend_cibil_otp(request):
 
         # Successful resend
         if api_response["responseCode"] == "SOS174":
-
             current_time = datetime.now(timezone.utc)
 
             await coll.update_one(
                 {"_id": otp_document["_id"]},
                 {
                     "$inc": {
-                        "resend_attempts": 1
+                        "resend_attempts": 1,
                     },
                     "$set": {
                         "otp_status": CibilOTPStatus.OTP_RESENT.value,
+                        "verification_attempts": 0,
                         "otp_generated_at": current_time,
-                        "expires_at": current_time + timedelta(minutes=10),
                         "updated_at": current_time,
                     },
                 },
@@ -433,7 +420,7 @@ async def resend_cibil_otp(request):
                 content={
                     "message": api_response["responseMessage"],
                     "data": {
-                        "otp_flow_id": otp_flow_id
+                        "otp_flow_id": otp_flow_id,
                     },
                     "responseCode": api_response["responseCode"],
                 },
@@ -442,7 +429,7 @@ async def resend_cibil_otp(request):
         return raise_cibil_resend_otp_exception(api_response)
 
     except Exception as e:
-        print("Error raised here",e)
+        print("Error raised here", e)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
@@ -451,9 +438,182 @@ async def resend_cibil_otp(request):
                 "responseCode": "SYS_INT_ERR",
             },
         )
-        
-# async def cibil_webhook_consumer(request):
-#     try:
+
+
+async def cibil_webhook_consumer(request):
+    try:
+        input_data = await request.json()
+
+        if not input_data:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Webhook data is empty",
+                    "data": None,
+                    "responseCode": "SYS_INPUT_ERR",
+                },
+            )
+
+        response_code = input_data.get("responseCode")
+        message = input_data.get("message")
+        data = input_data.get("data", {})
+        reference_id = data.get("referenceId")
+
+        if not reference_id:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Reference ID is missing",
+                    "data": None,
+                    "responseCode": "SYS_INPUT_ERR",
+                },
+            )
+
+        mongo_db = request.app.state.mongo_db
+        otp_manager = mongo_db["cibil_otp_manager"]
+
+        # Common function to update webhook message
+        async def update_webhook_message():
+            await otp_manager.update_one(
+                {"reference_id": reference_id},
+                {"$set": {"webhook_message": message}},
+            )
+
+        if response_code == "EOV841":
+            await update_webhook_message()
+
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "message": "Webhook data successfully saved",
+                    "data": None,
+                    "responseCode": "SYS_OK",
+                },
+            )
+
+        if response_code != "SRC001":
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "message": "Webhook ignored",
+                    "data": None,
+                    "responseCode": "SYS_OK",
+                },
+            )
+
+        cibil_otp_doc = await otp_manager.find_one({"reference_id": reference_id})
+
+        if not cibil_otp_doc:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={
+                    "message": "Reference ID not found",
+                    "data": None,
+                    "responseCode": "SYS_NOT_FOUND",
+                },
+            )
+
+        json_url = data.get("jsonUrl")
+        if not json_url:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "jsonUrl missing",
+                    "data": None,
+                    "responseCode": "SYS_INPUT_ERR",
+                },
+            )
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                json_url,
+                headers={
+                    "clientId": os.getenv("CLIENT_ID"),
+                    "clientSecret": os.getenv("CLIENT_SECRET"),
+                },
+            )
+
+        if response.status_code != 200:
+            return JSONResponse(
+                status_code=response.status_code,
+                content={
+                    "message": "Failed to fetch CIBIL report",
+                    "data": None,
+                    "responseCode": "SYS_INT_ERR",
+                },
+            )
+
+        cibil_report = {
+            "user_id": cibil_otp_doc["user_id"],
+            "reference_id": reference_id,
+            "cibil_report": response.json(),
+            "cibil_pulled_date": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": None,
+        }
+
+        await mongo_db["cibil_report"].insert_one(cibil_report)
+
+        await update_webhook_message()
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Webhook data successfully saved",
+                "data": None,
+                "responseCode": "SYS_OK",
+            },
+        )
+    except json.decoder.JSONDecodeError:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "message": "Invalid JSON",
+                "data": None,
+                "responseCode": "SYS_INPUT_ERR",
+            },
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

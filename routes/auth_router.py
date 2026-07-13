@@ -4,7 +4,7 @@ from starlette.requests import Request
 from json.decoder import JSONDecodeError
 from utils.auth_utility import is_password_valid
 auth_router = APIRouter(prefix="/v1/auth")
-from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_
+from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller
 
 
 @auth_router.post("/register")
@@ -96,6 +96,20 @@ async def reset_password(request: Request):
         reset_token = input_payload.get("reset_token",None)
         new_password = input_payload.get("new_password",None)
         return await reset_password_(reset_token,new_password,request.app.state.mongo_db)
+    except JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid request body")
+    except HTTPException as e:
+        raise e
+
+
+
+# checking r1xchange account id is there or not
+
+@auth_router.get("/check-r1xchange-account/{acc_id}")
+async def check_r1xchange_account(request: Request,acc_id:int):
+    try:
+        print("===========================>1")
+        return await check_r1xchange_account_controller(acc_id,request)
     except JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid request body")
     except HTTPException as e:

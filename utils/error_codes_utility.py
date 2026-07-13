@@ -468,78 +468,78 @@ DIGILOCKER_GET_DOCUMENT_ERROR_MAP = {
 }
 
 CIBIL_BUREAU_GENERATE_OTP_ERROR_MAP = {
-    "EFL435": {
-        "status_code": 400,
-        "message": "First name and last name are mandatory."
+    "EPI022": {
+        "message": "Payload is Incorrect.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EDB439": {
-        "status_code": 400,
-        "message": "Invalid date of birth. Please provide the DOB in YYYY-MM-DD format."
+    "EEI2002": {
+        "message": "Error in Input.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EGD444": {
-        "status_code": 400,
-        "message": "Invalid gender. Gender must be either 'M' or 'F'."
+    "ELN2004": {
+        "message": "Error in First Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EAD434": {
-        "status_code": 400,
-        "message": "Invalid address. Please provide a valid address."
+    "ELN2005": {
+        "message": "Error in Last Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EID429": {
-        "status_code": 400,
-        "message": "Identity information is missing. Please provide a valid PAN, Passport, or Driving License."
+    "EEA2006": {
+        "message": "Error in Address.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EID443": {
-        "status_code": 400,
-        "message": "Invalid identity format. Please verify the provided identity number."
+    "EBF017": {
+        "message": "Blank Input Field.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EDV515": {
-        "status_code": 400,
-        "message": "Data validation failed. Please verify the request payload."
+    "EIB721": {
+        "message": "Incorrect Bureau Type.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "ECI419": {
-        "status_code": 500,
-        "message": "Credit Bureau service configuration error. Please try again later."
+    "ENR901": {
+        "message": "Number of requests exceeds the allowed limit.",
+        "status_code": status.HTTP_429_TOO_MANY_REQUESTS,
     },
-    "EGD509": {
-        "status_code": 502,
-        "message": "Credit Bureau service is currently unavailable. Please try again later."
+    "EEG2015": {
+        "message": "Error in Gender.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EIN2009": {
+        "message": "Error in Identity Number.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EMN2010": {
+        "message": "Error in Mobile Number.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
     "EDB2012": {
-        "status_code": 400,
-        "message": "Invalid date of birth. Please provide the DOB in YYYY-MM-DD format."
+        "message": "Error in Date of Birth format.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
     "ESC2008": {
-            "status_code": 400,
-            "message":"Error in State code"
-        },
-    "EEP2007":{
-        "status_code": 400,
-        "message":"Error in Pincode"
+        "message": "Error in State Code.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EIN2009":{
-        "status_code": 400,
-        "message":"Error in Identity Number"
+    "EEP2007": {
+        "message": "Error in Pincode.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EMN2010":{
-        "status_code": 400,
-        "message":"Error in Mobile Number"
+    "EMS2013": {
+        "message": "Mismatch between State Code and Pincode.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "ELL420":{
-        "status_code": 400,
-        "message":"Login attempts limit exceeded"
+    "EMN2014": {
+        "message": "Error in Middle Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
     },
-    "EEA2006":{
-        "status_code": 400,
-        "message":"Error in Address"
+    "ELL420": {
+        "message": "Login attempts limit exceeded.",
+        "status_code": status.HTTP_429_TOO_MANY_REQUESTS,
     },
-    "EBF017":{
-        "status_code": 400,
-        "message":"Blank Input Field"
-    }
 }
 
 CIBIL_VALIDATE_OTP_ERROR_MAP = {
-    "ETP011": {"message": "Incorrect OTP", "staus_code": status.HTTP_400_BAD_REQUEST},
+    "ETP011": {"message": "Incorrect OTP", "status_code": status.HTTP_400_BAD_REQUEST},
     "SOS176": {"message": "OTP expired", "status_code": status.HTTP_400_BAD_REQUEST},
     "SOS177": {"message": "Maximum OTP attempts exceeded", "status_code": status.HTTP_429_TOO_MANY_REQUESTS},
     "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
@@ -565,4 +565,8 @@ CIBIL_RESEND_OTP_ERROR_CODES = {
         "status_code": 502,
         "message": "Credit Bureau service is currently unavailable. Please try again later."
     },
+    "ERR541":{
+        "status_code": 400,
+        "message":"OTP either expired or not generated yet. Please reinitiate request again"
+    }
 }
