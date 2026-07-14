@@ -8,6 +8,8 @@ from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
+
+from config.config import SiteCode
 from utils.auth_utility import hash_password, get_auth_dict,verify_password, create_access_token,is_password_valid
 from utils.user_utility import get_user_dict
 from controller.backgroud_task_controller import send_reset_email_to_user
@@ -33,42 +35,29 @@ async def register_user(
     phone_no = input_data.get("phone_no")
     customer_name = input_data.get('customer_name')
     password = input_data.get('password')
-    is_from_crm = input_data.get('is_from_crm_account', False)
+    site_code = input_data.get('site_code')
 
     try:
         user_collection = mongodb_database['users']
         auth_collection = mongodb_database['auth']
         user = await user_collection.find_one({'phone': phone_no})
-        print("This is user", user)
 
         if user:
             return JSONResponse(status_code=409, content={'message': 'User already exists!'})
 
-        if is_from_crm:
-            account_id = input_data.get('account_id')
-            if not account_id:
-                return HTTPException(status_code=400, detail={"message": "account_id is required"})
-
-            hashed_password = hash_password(password)
-
-            user = get_user_dict(account_id, email_id, phone_no, company_name, gst_number, customer_name)
-            auth = get_auth_dict(user.get("_id"), hashed_password)
-
-            await user_collection.insert_one(user)
-            await auth_collection.insert_one(auth)
-
-            return JSONResponse(  # FIX: was missing closing parenthesis
-                status_code=201,
-                content={
-                    'message': 'User registered successfully!',
-                    'data': {'email': f"{email_id}", 'password': f"{password}"}
-                }
-            )
-
         else:
+            #use the from flag to determine which database to check for the user and registration
+
+            if site_code == SiteCode.R1X01.value:
+                table_name = "accounts"
+            elif site_code == SiteCode.PCX01.value:
+                table_name = "accounts_5p"
+            else:
+                return JSONResponse(status_code=400, content={'message': 'Invalid site code!'})
+
             existing_account = await postgres_conn.fetchrow(
-                """
-                SELECT id FROM accounts
+                f"""
+                SELECT id FROM {table_name}
                 WHERE RIGHT(phone, 10) = RIGHT($1, 10)
                 """,
                 phone_no
@@ -79,8 +68,8 @@ async def register_user(
                 account_id = existing_account['id']
             else:
                 account_id = await postgres_conn.fetchval(
-                    """
-                    INSERT INTO accounts (
+                    f"""
+                    INSERT INTO {table_name} (
                         account_name,
                         email,
                         phone,
@@ -103,7 +92,7 @@ async def register_user(
 
             hashed_password = hash_password(password)
 
-            user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name)
+            user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name,site_code=site_code)
             auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
 
             await user_collection.insert_one(user)
@@ -119,7 +108,6 @@ async def register_user(
                 status_code=201,
                 content={'message': 'User registration successful, please login to continue!'}
             )
-
     except Exception as e:
         print("Error while creating user 5pointcreditsupport:", str(e))
         raise HTTPException(status_code=500, detail="Error while creating user contact 5pointcreditsupport")
@@ -149,7 +137,6 @@ async def user_login(mongodb_connection, input_data: dict):
             )
         company_name = user.get("company_name") 
         auth = await auth_collection.find_one({"user_id":ObjectId(user['_id'])})
-        print(auth['password_hash'])
 
         if not verify_password(password, auth["password_hash"]):
             raise HTTPException(
@@ -166,14 +153,7 @@ async def user_login(mongodb_connection, input_data: dict):
             status_code=status.HTTP_200_OK,
             content={
                 "status": True,
-                "message": "Login successful",
-                "data": {
-                    "user_id": str(user["_id"]),
-                    "company_name": company_name,
-                    "email_id": email_id,
-                    "token": token
-                }
-            }
+                "message": "Login successful"}
         )
 
         response.set_cookie(
@@ -464,8 +444,8 @@ async def check_r1xchange_account_controller(acc_id:str,request):
            raise HTTPException(status_code=status.HTTP_204_NO_CONTENT, detail="Requested User Not Found please contact admin for support")
 
         return JSONResponse(status_code=status.HTTP_200_OK, content={"message": "success","user_exist":True, "data": user})
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        raise e
     except Exception as e:
         print("Error in get_current_user:", e)
         raise HTTPException(
