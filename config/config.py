@@ -1,3 +1,4 @@
+import enum
 import os
 from enum import Enum
 
@@ -79,3 +80,8 @@ class CibilWebhookStatus(Enum):
     FAILED = "FAILED"
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
+
+
+class SiteCode(enum.Enum):
+    R1X01 = "R1X01"
+    PCX01 = "PCX01"

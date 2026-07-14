@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 
-def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_name)->dict:
+def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_name,site_code)->dict:
             user = {
                             # Identity
                             "_id":ObjectId(),
@@ -30,5 +30,9 @@ def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_
                             # Metadata (optional)
                             "created_by": "system",
                             "updated_by": "system",
+
+                            #site metadata
+                            "site_code":site_code
+
                         }
             return  user

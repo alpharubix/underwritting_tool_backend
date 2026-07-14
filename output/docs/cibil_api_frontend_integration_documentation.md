@@ -6,20 +6,20 @@ Generated from current repository code on 2026-07-13.
 
 ## Source Scope
 
-This document covers the active FastAPI CIBIL routes registered in:
+This document describes the active CIBIL frontend API implemented in:
 
 - `routes/cibil_router.py`
 - `controller/cibil_controller/cibil_bereau_controller.py`
-- `controller/webhook/scoreme_webhook_controller.py`
 - `routes/webhook_router.py`
+- `controller/webhook/scoreme_webhook_controller.py`
 - `middleware/authorization_middleware.py`
 - `custom_exceptions/scoreme_exceptions.py`
 - `utils/error_codes_utility.py`
 - `config/config.py`
 
-This is frontend-integration-centric documentation. It describes what the frontend should send, what it can expect back, and the integration caveats visible in the current backend implementation.
+The backend routes are named CIBIL, but the current vendor payload sends `bureauName: ["equifax"]`.
 
-## 1. Base Path And Authentication
+## 1. Base URL And Authentication
 
 Base path:
 
@@ -27,17 +27,9 @@ Base path:
 {API_BASE_URL}/v1/cibil
 ```
 
-Authentication:
+All `/v1/cibil/*` endpoints are protected by the global authorization middleware. The frontend must send the login cookie named `access_token`.
 
-All `/v1/cibil/*` endpoints are protected by the global authorization middleware. The frontend must already be logged in and must send the `access_token` cookie with every request.
-
-Frontend fetch requirement:
-
-```ts
-credentials: "include"
-```
-
-Example:
+Use `credentials: "include"` in browser requests:
 
 ```ts
 await fetch(`${API_BASE_URL}/v1/cibil/list-reports`, {
@@ -46,7 +38,7 @@ await fetch(`${API_BASE_URL}/v1/cibil/list-reports`, {
 });
 ```
 
-Auth failure responses:
+Authentication failure responses come from middleware and do not use the normal API envelope:
 
 ```json
 {
@@ -60,28 +52,61 @@ Auth failure responses:
 }
 ```
 
-## 2. Response Shapes And Frontend Normalization
+## 2. Endpoint Summary
 
-Most successful CIBIL responses follow:
+Frontend endpoints:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/v1/cibil/generate-otp` | Start bureau OTP flow |
+| POST | `/v1/cibil/validate-otp` | Validate user-entered OTP |
+| POST | `/v1/cibil/resend-otp` | Resend OTP for an existing flow |
+| GET | `/v1/cibil/webhook-status/{otp_flow_id}` | Poll asynchronous report status |
+| GET | `/v1/cibil/list-reports` | List stored reports for logged-in user |
+| GET | `/v1/cibil/overview/{reference_id}` | Get overview/general info section |
+| GET | `/v1/cibil/account-summary/{reference_id}` | Get account summary section |
+| GET | `/v1/cibil/payment-history/{reference_id}` | Get repayment history section |
+| GET | `/v1/cibil/analysis/{reference_id}` | Get ScoreMe analysis section |
+
+Backend-only callback endpoint:
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| POST | `/webhook/credit-bureau` | ScoreMe callback for report generation |
+
+The frontend should not call `/webhook/credit-bureau`.
+
+## 3. Response Envelope
+
+Most successful CIBIL responses follow this shape:
 
 ```json
 {
-  "message": "...",
+  "message": "Human readable message",
   "data": {},
   "responseCode": "SYS_OK"
 }
 ```
 
-Important current caveat:
+Current implementation caveat:
 
-Some CIBIL error responses use lowercase `responsecode` instead of `responseCode`. The frontend should normalize both until the backend standardizes this.
+Some error responses use lowercase `responsecode` instead of `responseCode`. The frontend should normalize both until the backend standardizes the casing.
 
-Recommended frontend response parser:
+Recommended response parser:
 
 ```ts
-export async function parseApiResponse(response: Response) {
+export type ApiResult<T> = {
+  ok: boolean;
+  status: number;
+  message: string;
+  responseCode: string | null;
+  data: T | null;
+  raw: unknown;
+};
+
+export async function parseApiResponse<T>(response: Response): Promise<ApiResult<T>> {
   const body = await response.json().catch(() => ({}));
-  const payload = body.detail || body;
+  const payload = (body as any).detail || body;
 
   return {
     ok: response.ok,
@@ -94,96 +119,36 @@ export async function parseApiResponse(response: Response) {
 }
 ```
 
-## 3. Active Endpoint Summary
-
-The current CIBIL router exposes 8 frontend endpoints:
-
-```text
-POST /v1/cibil/generate-otp
-POST /v1/cibil/validate-otp
-POST /v1/cibil/resend-otp
-GET  /v1/cibil/webhook-status/{otp_flow_id}
-GET  /v1/cibil/list-reports
-GET  /v1/cibil/overview/{reference_id}
-GET  /v1/cibil/account-summary/{reference_id}
-GET  /v1/cibil/payment-history/{reference_id}
-GET  /v1/cibil/analysis/{reference_id}
-```
-
-Backend callback endpoint:
-
-```text
-POST /webhook/credit-bureau
-```
-
-The frontend should not call the webhook endpoint. It is public so ScoreMe can call it.
-
 ## 4. Recommended Frontend Flow
 
-1. Generate OTP:
+1. Collect applicant details and call `POST /v1/cibil/generate-otp`.
+2. Store `data.otp_flow_id` in component/session state.
+3. Ask the user to enter the OTP.
+4. Call `POST /v1/cibil/validate-otp`.
+5. After successful validation, poll `GET /v1/cibil/webhook-status/{otp_flow_id}`.
+6. Continue polling while `data.webhook_status` is `IN_PROGRESS`.
+7. On `SUCCESS`, call `GET /v1/cibil/list-reports`.
+8. Select the relevant `reference_id`, usually the newest report if only one CIBIL flow is active.
+9. Call section APIs using the selected `reference_id`.
 
-```text
-POST /v1/cibil/generate-otp
-```
+Important: the current backend does not return `reference_id` from `generate-otp`, `validate-otp`, or `webhook-status`. The only frontend-accessible way to discover it is `list-reports`.
 
-Store `data.otp_flow_id`.
+Recommended polling behavior:
 
-2. Validate OTP:
-
-```text
-POST /v1/cibil/validate-otp
-```
-
-Use the same `otp_flow_id` and the OTP entered by the user.
-
-3. Poll report generation status:
-
-```text
-GET /v1/cibil/webhook-status/{otp_flow_id}
-```
-
-Expected `data.webhook_status` values:
-
-```text
-IN_PROGRESS
-SUCCESS
-FAILED
-```
-
-4. After `SUCCESS`, fetch reports:
-
-```text
-GET /v1/cibil/list-reports
-```
-
-The current backend does not return `reference_id` from `webhook-status`, `generate-otp`, or `validate-otp`. The frontend needs `reference_id` to call report section APIs, so the current workaround is to call `list-reports` and select the relevant report, usually the newest `cibil_pulled_date`.
-
-Recommended backend improvement:
-
-Return the matching `reference_id` in `GET /v1/cibil/webhook-status/{otp_flow_id}` when status is `SUCCESS`.
-
-5. Fetch report sections:
-
-```text
-GET /v1/cibil/overview/{reference_id}
-GET /v1/cibil/account-summary/{reference_id}
-GET /v1/cibil/payment-history/{reference_id}
-GET /v1/cibil/analysis/{reference_id}
-```
+- Poll every 3 to 5 seconds.
+- Stop after a UI timeout, for example 2 to 3 minutes.
+- On `FAILED`, show a retry/reinitiate message.
+- On auth failure, redirect to login or refresh session.
 
 ## 5. Endpoint Details
 
 ### 5.1 Generate CIBIL OTP
 
-Endpoint:
-
 ```text
 POST /v1/cibil/generate-otp
 ```
 
-Purpose:
-
-Validates basic required fields, calls ScoreMe retail bureau OTP API, stores OTP flow metadata in MongoDB, and returns an internal `otp_flow_id`.
+Starts a ScoreMe credit bureau OTP flow and stores an internal OTP manager document.
 
 Request body:
 
@@ -207,11 +172,20 @@ Request body:
 
 Current backend validation:
 
-- All listed keys are required.
-- Values are rejected only when `null`.
-- Empty strings are currently accepted for this endpoint.
-- `middle_name` is required by the current backend even if the person has no middle name.
-- Field format validation is delegated mostly to ScoreMe.
+| Field | Required | Current validation |
+| --- | --- | --- |
+| `first_name` | Yes | Key must exist and value must not be `null` |
+| `middle_name` | Yes | Key must exist and value must not be `null`; send `""` if not available |
+| `last_name` | Yes | Key must exist and value must not be `null` |
+| `date_of_birth` | Yes | Key must exist and value must not be `null` |
+| `gender` | Yes | Key must exist and value must not be `null` |
+| `mobile_number` | Yes | Key must exist and value must not be `null` |
+| `address` | Yes | Key must exist and value must not be `null` |
+| `state` | Yes | Key must exist and value must not be `null` |
+| `pincode` | Yes | Key must exist and value must not be `null` |
+| `identity` | Yes | Key must exist and value must not be `null` |
+
+Empty strings are currently accepted by the backend for this endpoint, but the frontend should still validate user input before submission.
 
 Success:
 
@@ -225,7 +199,7 @@ Success:
 }
 ```
 
-Common frontend-handled errors:
+Common validation errors:
 
 ```json
 {
@@ -243,41 +217,47 @@ Common frontend-handled errors:
 }
 ```
 
-ScoreMe error examples:
-
-```text
-EPI022  Payload is Incorrect.
-EEI2002 Error in Input.
-ELN2004 Error in First Name.
-ELN2005 Error in Last Name.
-EEA2006 Error in Address.
-EEG2015 Error in Gender.
-EIN2009 Error in Identity Number.
-EMN2010 Error in Mobile Number.
-EDB2012 Error in Date of Birth format.
-ESC2008 Error in State Code.
-EEP2007 Error in Pincode.
-EMS2013 Mismatch between State Code and Pincode.
-EMN2014 Error in Middle Name.
-ENR901 Number of requests exceeds the allowed limit.
-ELL420 Login attempts limit exceeded.
+```json
+{
+  "message": "first_name value is empty",
+  "data": null,
+  "responsecode": "SYS_INPUT_ERR"
+}
 ```
+
+Vendor error codes handled by backend:
+
+| Code | Meaning | HTTP status |
+| --- | --- | --- |
+| `EPI022` | Payload is incorrect | 400 |
+| `EEI2002` | Error in input | 400 |
+| `ELN2004` | Error in first name | 400 |
+| `ELN2005` | Error in last name | 400 |
+| `EEA2006` | Error in address | 400 |
+| `EBF017` | Blank input field | 400 |
+| `EIB721` | Incorrect bureau type | 400 |
+| `ENR901` | Request limit exceeded | 429 |
+| `EEG2015` | Error in gender | 400 |
+| `EIN2009` | Error in identity number | 400 |
+| `EMN2010` | Error in mobile number | 400 |
+| `EDB2012` | Error in date of birth format | 400 |
+| `ESC2008` | Error in state code | 400 |
+| `EEP2007` | Error in pincode | 400 |
+| `EMS2013` | State code and pincode mismatch | 400 |
+| `EMN2014` | Error in middle name | 400 |
+| `ELL420` | Login attempts limit exceeded | 429 |
 
 Frontend action:
 
-Store `data.otp_flow_id` in component/session state. Do not persist it longer than needed.
+Store `data.otp_flow_id` and show OTP entry UI.
 
 ### 5.2 Validate CIBIL OTP
-
-Endpoint:
 
 ```text
 POST /v1/cibil/validate-otp
 ```
 
-Purpose:
-
-Validates the OTP against the ScoreMe reference stored for the logged-in user's OTP flow.
+Validates the OTP using the ScoreMe `reference_id` stored for the logged-in user's OTP flow.
 
 Request body:
 
@@ -287,6 +267,13 @@ Request body:
   "otp": "123456"
 }
 ```
+
+Current backend validation:
+
+| Field | Required | Current validation |
+| --- | --- | --- |
+| `otp_flow_id` | Yes | Must exist and must not be blank |
+| `otp` | Yes | Must exist and must not be blank |
 
 Success:
 
@@ -302,37 +289,59 @@ Success:
 
 Important behavior:
 
-- If the OTP flow does not belong to the logged-in user, the backend returns 404.
-- If OTP is already verified, the backend returns 400 with `ERU061`.
-- The backend blocks verification once `verification_attempts >= 3`.
-- Report generation is asynchronous. A successful OTP validation does not mean the report is available immediately.
+- If the OTP flow does not exist for the logged-in user, backend returns 404.
+- If OTP is already verified, backend returns 400 with `ERU061`.
+- Backend blocks verification when stored `verification_attempts >= 3`.
+- Successful validation only means the report request moved forward. The report is delivered later through webhook.
 
-Common errors:
+Common frontend-handled errors:
 
-```text
-ETP011  Incorrect OTP
-SOS176  OTP expired
-SOS177  Maximum OTP attempts exceeded
-SOS178  OTP not found
-ERR541  OTP either expired or not generated yet. Please reinitiate request again
-ECB846  Consumer not found in bureau
+```json
+{
+  "message": "OTP flow not found.",
+  "data": null,
+  "responseCode": "SYS_INPUT_ERR"
+}
 ```
+
+```json
+{
+  "message": "OTP has already been verified.",
+  "data": null,
+  "responseCode": "ERU061"
+}
+```
+
+```json
+{
+  "message": "Maximum OTP verification attempts exceeded.",
+  "data": null,
+  "responseCode": "SYS_INPUT_ERR"
+}
+```
+
+Vendor error codes handled by backend:
+
+| Code | Meaning | HTTP status |
+| --- | --- | --- |
+| `ETP011` | Incorrect OTP | 400 |
+| `SOS176` | OTP expired | 400 |
+| `SOS177` | Maximum OTP attempts exceeded | 429 |
+| `SOS178` | OTP not found | 404 |
+| `ERR541` | OTP expired or not generated | 400 |
+| `ECB846` | Consumer not found in bureau | 400 |
 
 Frontend action:
 
-Start polling `GET /v1/cibil/webhook-status/{otp_flow_id}` after success.
+On success, start polling `GET /v1/cibil/webhook-status/{otp_flow_id}`.
 
 ### 5.3 Resend CIBIL OTP
-
-Endpoint:
 
 ```text
 POST /v1/cibil/resend-otp
 ```
 
-Purpose:
-
-Requests ScoreMe to resend OTP for an existing OTP flow.
+Requests a new OTP for an existing OTP flow.
 
 Request body:
 
@@ -356,31 +365,37 @@ Success:
 
 Important behavior:
 
+- Resend is blocked when the OTP is already verified.
 - Resend is blocked after 3 resend attempts.
-- Resend is blocked if OTP is already verified.
-- On successful resend, verification attempts are reset to 0.
+- On successful resend, `verification_attempts` is reset to `0`.
 
 Common errors:
 
-```text
-ERU061 OTP has already been verified.
-ERU063 Maximum OTP resend attempts exceeded.
-ECI419 Credit Bureau service configuration error.
-EGD509 Credit Bureau service is currently unavailable.
-ERR541 OTP either expired or not generated yet.
-```
+| Code | Meaning | HTTP status |
+| --- | --- | --- |
+| `ERU061` | OTP has already been verified | 400 |
+| `ERU063` | Maximum resend attempts exceeded | 429 |
+| `ECI419` | Credit bureau service configuration error | 500 |
+| `EGD509` | Credit bureau service unavailable | 502 |
+| `ERR541` | OTP expired or not generated | 400 |
+
+Frontend action:
+
+Keep the same `otp_flow_id`; do not call `generate-otp` again unless the user restarts the full flow.
 
 ### 5.4 Get Webhook Status
-
-Endpoint:
 
 ```text
 GET /v1/cibil/webhook-status/{otp_flow_id}
 ```
 
-Purpose:
+Polls asynchronous report generation state for the logged-in user's OTP flow.
 
-Allows the frontend to poll the asynchronous report generation state after OTP validation.
+Path parameter:
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `otp_flow_id` | string | Yes | Internal flow ID returned by `generate-otp` |
 
 Success:
 
@@ -394,13 +409,15 @@ Success:
 }
 ```
 
-Status mapping:
+Possible `data.webhook_status` values:
 
-- Stored `PENDING` is returned to the frontend as `IN_PROGRESS`.
-- Stored `SUCCESS` is returned as `SUCCESS`.
-- Stored `FAILED` is returned as `FAILED`.
+| Value | Meaning | Frontend action |
+| --- | --- | --- |
+| `IN_PROGRESS` | Backend is waiting for ScoreMe webhook or report fetch is not finished | Keep polling |
+| `SUCCESS` | Report was saved in backend | Call `list-reports`, then section APIs |
+| `FAILED` | ScoreMe webhook reported failure or was ignored as failed | Stop polling and show retry/reinitiate UI |
 
-Invalid `otp_flow_id`:
+Invalid flow:
 
 ```json
 {
@@ -410,24 +427,17 @@ Invalid `otp_flow_id`:
 }
 ```
 
-Recommended polling:
+Current limitation:
 
-- Poll every 3 to 5 seconds.
-- Stop after a frontend timeout, for example 2 to 3 minutes.
-- On `SUCCESS`, call `list-reports`.
-- On `FAILED`, show a retry/reinitiate message.
+This endpoint does not return `reference_id`, even when status is `SUCCESS`.
 
 ### 5.5 List CIBIL Reports
-
-Endpoint:
 
 ```text
 GET /v1/cibil/list-reports
 ```
 
-Purpose:
-
-Returns all stored CIBIL reports for the logged-in user with only reference IDs and pull dates.
+Returns the logged-in user's saved report references.
 
 Success:
 
@@ -446,19 +456,25 @@ Success:
 
 Frontend action:
 
-Use `reference_id` to fetch report sections. If this call is used immediately after a webhook status success, select the newest report only if users cannot have overlapping CIBIL flows. Otherwise ask backend to return `reference_id` from the status endpoint.
+Use `reference_id` to call report section APIs. If this call is used immediately after status `SUCCESS`, choose the newest `cibil_pulled_date` only when the user cannot have multiple active CIBIL flows.
+
+Current limitation:
+
+The endpoint has no pagination or sorting parameters. The backend returns every report for the user.
 
 ### 5.6 Get Overview
-
-Endpoint:
 
 ```text
 GET /v1/cibil/overview/{reference_id}
 ```
 
-Purpose:
-
 Returns high-level bureau analysis and general information.
+
+Path parameter:
+
+| Parameter | Type | Required |
+| --- | --- | --- |
+| `reference_id` | string | Yes |
 
 Success:
 
@@ -491,11 +507,11 @@ Not found:
 
 ### 5.7 Get Account Summary
 
-Endpoint:
-
 ```text
 GET /v1/cibil/account-summary/{reference_id}
 ```
+
+Returns account summary from the saved bureau report.
 
 Success:
 
@@ -514,19 +530,23 @@ Success:
 }
 ```
 
-Not found response code:
+Not found:
 
-```text
-CBL_NOT_FOUND
+```json
+{
+  "message": "CIBIL report not found",
+  "data": null,
+  "responseCode": "CBL_NOT_FOUND"
+}
 ```
 
 ### 5.8 Get Payment History
 
-Endpoint:
-
 ```text
 GET /v1/cibil/payment-history/{reference_id}
 ```
+
+Returns active and closed account repayment track sections.
 
 Success:
 
@@ -546,13 +566,23 @@ Success:
 }
 ```
 
-### 5.9 Get Analysis
+Not found:
 
-Endpoint:
+```json
+{
+  "message": "CIBIL report not found",
+  "data": null,
+  "responseCode": "CBL_NOT_FOUND"
+}
+```
+
+### 5.9 Get Analysis
 
 ```text
 GET /v1/cibil/analysis/{reference_id}
 ```
+
+Returns ScoreMe analysis from the saved bureau report.
 
 Success:
 
@@ -571,84 +601,203 @@ Success:
 }
 ```
 
-## 6. Frontend Integration Example
+Not found:
+
+```json
+{
+  "message": "CIBIL report not found",
+  "data": null,
+  "responseCode": "CBL_NOT_FOUND"
+}
+```
+
+## 6. Frontend TypeScript Client Example
 
 ```ts
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-async function cibilRequest(path: string, init: RequestInit = {}) {
+type GenerateCibilOtpPayload = {
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  date_of_birth: string;
+  gender: string;
+  mobile_number: string;
+  address: string;
+  state: string;
+  pincode: string;
+  identity: {
+    idType: string;
+    idNumber: string;
+  };
+};
+
+type OtpFlowResponse = {
+  otp_flow_id: string;
+};
+
+type WebhookStatusResponse = {
+  webhook_status: "IN_PROGRESS" | "SUCCESS" | "FAILED";
+};
+
+type CibilReportListItem = {
+  reference_id: string;
+  cibil_pulled_date: string;
+};
+
+async function cibilRequest<T>(path: string, init: RequestInit = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
       ...(init.headers || {}),
     },
   });
 
-  return parseApiResponse(response);
+  return parseApiResponse<T>(response);
 }
 
-export async function generateCibilOtp(payload: unknown) {
-  return cibilRequest("/v1/cibil/generate-otp", {
+export function generateCibilOtp(payload: GenerateCibilOtpPayload) {
+  return cibilRequest<OtpFlowResponse>("/v1/cibil/generate-otp", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function validateCibilOtp(otpFlowId: string, otp: string) {
-  return cibilRequest("/v1/cibil/validate-otp", {
+export function validateCibilOtp(otpFlowId: string, otp: string) {
+  return cibilRequest<OtpFlowResponse>("/v1/cibil/validate-otp", {
     method: "POST",
     body: JSON.stringify({ otp_flow_id: otpFlowId, otp }),
   });
 }
 
-export async function getCibilWebhookStatus(otpFlowId: string) {
-  return cibilRequest(`/v1/cibil/webhook-status/${otpFlowId}`, {
+export function resendCibilOtp(otpFlowId: string) {
+  return cibilRequest<OtpFlowResponse>("/v1/cibil/resend-otp", {
+    method: "POST",
+    body: JSON.stringify({ otp_flow_id: otpFlowId }),
+  });
+}
+
+export function getCibilWebhookStatus(otpFlowId: string) {
+  return cibilRequest<WebhookStatusResponse>(
+    `/v1/cibil/webhook-status/${encodeURIComponent(otpFlowId)}`,
+    { method: "GET" },
+  );
+}
+
+export function listCibilReports() {
+  return cibilRequest<CibilReportListItem[]>("/v1/cibil/list-reports", {
     method: "GET",
   });
 }
 
-export async function listCibilReports() {
-  return cibilRequest("/v1/cibil/list-reports", {
-    method: "GET",
-  });
+export function getCibilOverview(referenceId: string) {
+  return cibilRequest<unknown>(
+    `/v1/cibil/overview/${encodeURIComponent(referenceId)}`,
+    { method: "GET" },
+  );
 }
 
-export async function getCibilOverview(referenceId: string) {
-  return cibilRequest(`/v1/cibil/overview/${referenceId}`, {
-    method: "GET",
-  });
+export function getCibilAccountSummary(referenceId: string) {
+  return cibilRequest<unknown>(
+    `/v1/cibil/account-summary/${encodeURIComponent(referenceId)}`,
+    { method: "GET" },
+  );
+}
+
+export function getCibilPaymentHistory(referenceId: string) {
+  return cibilRequest<unknown>(
+    `/v1/cibil/payment-history/${encodeURIComponent(referenceId)}`,
+    { method: "GET" },
+  );
+}
+
+export function getCibilAnalysis(referenceId: string) {
+  return cibilRequest<unknown>(
+    `/v1/cibil/analysis/${encodeURIComponent(referenceId)}`,
+    { method: "GET" },
+  );
 }
 ```
 
-## 7. Frontend Validation Recommendations
+Polling helper example:
 
-Validate before calling `generate-otp`:
+```ts
+export async function waitForCibilReport(
+  otpFlowId: string,
+  options = { intervalMs: 4000, timeoutMs: 180000 },
+) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < options.timeoutMs) {
+    const result = await getCibilWebhookStatus(otpFlowId);
+
+    if (!result.ok) {
+      throw new Error(result.message);
+    }
+
+    if (result.data?.webhook_status === "SUCCESS") {
+      return result.data;
+    }
+
+    if (result.data?.webhook_status === "FAILED") {
+      throw new Error("CIBIL report generation failed");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, options.intervalMs));
+  }
+
+  throw new Error("CIBIL report generation timed out");
+}
+```
+
+## 7. UI State Recommendations
+
+Suggested states:
+
+| UI state | Trigger |
+| --- | --- |
+| `idle` | User has not submitted applicant details |
+| `generating_otp` | `generate-otp` request is in progress |
+| `otp_sent` | `generate-otp` succeeded |
+| `validating_otp` | `validate-otp` request is in progress |
+| `waiting_for_report` | OTP validated; webhook status polling is active |
+| `report_ready` | Webhook status returned `SUCCESS` and report list/section data is loaded |
+| `failed` | Any terminal API/vendor failure |
+
+Frontend validation before `generate-otp`:
 
 - `first_name`: required, non-empty string.
+- `middle_name`: send empty string if unavailable.
 - `last_name`: required, non-empty string.
-- `middle_name`: send empty string if unavailable because backend currently requires the key.
-- `date_of_birth`: required, use the exact format expected by ScoreMe for the configured bureau.
-- `gender`: required, use the vendor-supported value set.
+- `date_of_birth`: required; use the vendor-supported format.
+- `gender`: required; use the vendor-supported value set.
 - `mobile_number`: 10 digits.
 - `address`: required, non-empty string.
-- `state`: required, use vendor-supported state code.
+- `state`: required vendor-supported state code.
 - `pincode`: 6 digits.
-- `identity`: required, keep the shape aligned with ScoreMe's identity payload.
+- `identity`: required object with ID type and ID number.
 
-Validate before calling `validate-otp`:
+Frontend validation before `validate-otp`:
 
 - `otp_flow_id`: required.
 - `otp`: required, non-empty string.
 
-## 8. Backend Integration Caveats Visible To Frontend
+## 8. Current Backend Caveats Frontend Must Handle
 
-- `responseCode` casing is inconsistent. Normalize `responseCode || responsecode`.
-- `generate-otp` returns only `otp_flow_id`, not `reference_id`.
-- `validate-otp` returns only `otp_flow_id`, not `reference_id`.
-- `webhook-status` returns only status, not `reference_id`.
-- `list-reports` is the only current frontend-accessible way to discover `reference_id`.
-- Report section data shape depends on ScoreMe's `EquifaxRetail` JSON and is not strongly modeled by backend response schemas.
-- Error response shape from auth middleware is different from controller responses.
+- Normalize both `responseCode` and `responsecode`.
+- `generate-otp`, `validate-otp`, and `webhook-status` do not return `reference_id`.
+- `list-reports` is currently the only frontend-accessible way to discover `reference_id`.
+- Report section shapes are vendor-driven under `cibil_report.EquifaxRetail`.
+- Auth middleware responses do not follow the CIBIL response envelope.
+- Some backend messages contain spelling/casing issues, for example `successdfully`; use response codes for logic, not message text.
+- `list-reports` has no pagination or guaranteed sort order in the current implementation.
 
+## 9. Backend Improvement Requests That Would Simplify Frontend
+
+- Return `reference_id` from `GET /v1/cibil/webhook-status/{otp_flow_id}` when `webhook_status` is `SUCCESS`.
+- Standardize all responses to `responseCode`.
+- Add Pydantic schemas so OpenAPI docs show exact request and response types.
+- Add pagination and sorting to `list-reports`.
+- Return a normalized report section DTO instead of raw vendor-shaped nested data.
