@@ -8,6 +8,7 @@ SCOREME_BASE_URL = "https://sm-bsa.scoreme.in"
 SCOREME_UPLOAD_URL = f"{SCOREME_BASE_URL}/bsa/internal/uploadbankstatement"
 SCOREME_REPORT_URL = f"{SCOREME_BASE_URL}/bsa/internal/getbsareport"
 SCOREME_MERGE_URL= f"{SCOREME_BASE_URL}/bsa/external/mergebankstatement"
+SCOREME_BANK_NAME_URL = f"{SCOREME_BASE_URL}/bsa/external/getBankNames"
 
 #Gst service api's
 SCOREME_GST_BASE_URL= "https://sm-gst.scoreme.in"
@@ -17,12 +18,12 @@ SCOREME_GST_OTP_AUTHENTICATION = f"{SCOREME_GST_BASE_URL}/gst/external/gstauthen
 SCOREME_GST_POST_GSTIN = f"{SCOREME_GST_BASE_URL}/gst/external/postgstreport"
 
 #Itr service api's
-SCORE_ME_ITR_BASE_URL = "https://sm-itr-sandbox.scoreme.in"
+SCORE_ME_ITR_BASE_URL = "https://sm-itr.scoreme.in"
 SCOREME_FILE_ITR_LINK = f"{SCORE_ME_ITR_BASE_URL}/itr/external/fileAutomatedRequestUsingLink"
 SCOREME_ITR_GET_REFERENCE_STATUS = f"{SCORE_ME_ITR_BASE_URL}/itr/external/getItrCredentialSubmissionStatus"
 
 #Kyc service api's
-SCOREME_KYC_BASE_URL = "https://sm-itr.scoreme.in"
+SCOREME_KYC_BASE_URL = "https://sm-kyc-sync-prod.scoreme.in"
 SCOREME_AADHAAR_VERIFICATION_URL=f"{SCOREME_KYC_BASE_URL}/kyc/external/aadhaarOtp"
 SCOREME_AADHAAR_OTP_VERIFICATION = f"{SCOREME_KYC_BASE_URL}/kyc/external/aadhaarDetail"
 SCOREME_GENERATE_DIGI_URL=f"{SCOREME_KYC_BASE_URL}/kyc/external/initiateDigiLocker"

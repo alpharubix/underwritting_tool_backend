@@ -6,6 +6,8 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pymongo.results import UpdateResult
 from starlette.exceptions import HTTPException
 from starlette import status
+
+from config.config import SCOREME_UPLOAD_URL
 from custom_exceptions.scoreme_exceptions import raise_bsa_exception
 
 async def upload_to_scoreme(files, data_params):
@@ -20,7 +22,7 @@ async def upload_to_scoreme(files, data_params):
         try:
             request_initiated_time = datetime.now(timezone.utc)
             response = await client.post(
-                "https://sm-bsa-sandbox.scoreme.in/bsa/external/uploadbankstatement",
+                SCOREME_UPLOAD_URL,
                 headers={
                     "clientId": os.getenv("CLIENT_ID"), # Matches your .env
                     "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
