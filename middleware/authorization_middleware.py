@@ -10,7 +10,6 @@ from utils.auth_utility import get_decoded_jwt_token
 
 async def authorization(request: Request, call_next):
     try:
-        
         # Bypass OPTIONS and Public Routes
         public_patterns = [
             r"^/v1/bsa/crm-bsa-statement-report/\w+$",
