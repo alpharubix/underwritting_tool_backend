@@ -3,7 +3,8 @@ from fastapi import HTTPException, BackgroundTasks
 from fastapi.routing import APIRouter
 from fastapi.requests import Request
 from starlette import status
-from controller.webhook.scoreme_webhook_controller import gst_webhook_receiver,itr_webhook_receiver
+from controller.webhook.scoreme_webhook_controller import gst_webhook_receiver, itr_webhook_receiver, \
+    credit_bureau_webhook_receiver
 
 webhook_router = APIRouter(prefix='/webhook',tags=['Webhook'])
 
