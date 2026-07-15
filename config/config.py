@@ -1,3 +1,4 @@
+import enum
 import os
 from enum import Enum
 
@@ -29,6 +30,14 @@ SCOREME_DIGILOCKER_SESSION_STATUS_URL = f"{SCOREME_KYC_BASE_URL}/kyc/external/do
 SCOEME_DIGILOCKER_DOCUMENT_LIST_URL = f"{SCOREME_KYC_BASE_URL}/kyc/external/documentList"
 SCOREME_DICILOCKER_DOCUMENT_DOWNLOAD_URL = f"{SCOREME_KYC_BASE_URL}/kyc/external/document"
 
+
+SCOREME_CIBIL_BASE_URL = "https://sm-bda-sandbox.scoreme.in"
+SCOREME_GENERATE_CIBIL_OTP_URL = f"{SCOREME_CIBIL_BASE_URL}/bda/external/retail"
+SCOREME_VALIDATE_CIBIL_OTP_URL = f"{SCOREME_CIBIL_BASE_URL}/bda/external/validateotp"
+SCOREME_RESEND_CIBIL_OTP_URL=  f"{SCOREME_CIBIL_BASE_URL}/bda/external/resendotp"
+
+
+
 # MongoDB Settings
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "underwriting")
 
@@ -42,3 +51,37 @@ class KYC_FLOW_STATUS(Enum):
     CONSENT_REJECTED = "CONSENT_REJECTED"
     ERROR = "ERROR"
 
+class CibilOTPStatus(str, Enum):
+    # OTP Generation
+    OTP_SENT = "OTP_SENT"
+    OTP_REJECTED = "OTP_REJECTED"
+
+    # OTP Verification
+    OTP_VERIFIED = "OTP_VERIFIED"
+    OTP_INVALID = "OTP_INVALID"
+    OTP_EXPIRED = "OTP_EXPIRED"
+
+    # OTP Resend
+    OTP_RESENT = "OTP_RESENT"
+    OTP_RESEND_LIMIT_EXCEEDED = "OTP_RESEND_LIMIT_EXCEEDED"
+
+    # Credit Bureau Processing
+    REPORT_REQUESTED = "REPORT_REQUESTED"
+    REPORT_GENERATED = "REPORT_GENERATED"
+    REPORT_FAILED = "REPORT_FAILED"
+
+    # System States
+    PENDING = "PENDING"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+class CibilWebhookStatus(Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+
+
+class SiteCode(enum.Enum):
+    R1X01 = "R1X01"
+    PCX01 = "PCX01"

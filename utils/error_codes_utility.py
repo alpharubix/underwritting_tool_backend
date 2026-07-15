@@ -458,5 +458,115 @@ DIGILOCKER_GET_DOCUMENT_ERROR_MAP = {
         "message": "No Information Found.",
         "status_code": 404,
         "data": {}
+    },
+    "EUA1655":{
+        "status_code": 400,
+        "message":"User access denied",
+        "data":{}
+
+    }
+}
+
+CIBIL_BUREAU_GENERATE_OTP_ERROR_MAP = {
+    "EPI022": {
+        "message": "Payload is Incorrect.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EEI2002": {
+        "message": "Error in Input.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "ELN2004": {
+        "message": "Error in First Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "ELN2005": {
+        "message": "Error in Last Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EEA2006": {
+        "message": "Error in Address.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EBF017": {
+        "message": "Blank Input Field.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EIB721": {
+        "message": "Incorrect Bureau Type.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "ENR901": {
+        "message": "Number of requests exceeds the allowed limit.",
+        "status_code": status.HTTP_429_TOO_MANY_REQUESTS,
+    },
+    "EEG2015": {
+        "message": "Error in Gender.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EIN2009": {
+        "message": "Error in Identity Number.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EMN2010": {
+        "message": "Error in Mobile Number.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EDB2012": {
+        "message": "Error in Date of Birth format.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "ESC2008": {
+        "message": "Error in State Code.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EEP2007": {
+        "message": "Error in Pincode.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EMS2013": {
+        "message": "Mismatch between State Code and Pincode.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "EMN2014": {
+        "message": "Error in Middle Name.",
+        "status_code": status.HTTP_400_BAD_REQUEST,
+    },
+    "ELL420": {
+        "message": "Login attempts limit exceeded.",
+        "status_code": status.HTTP_429_TOO_MANY_REQUESTS,
+    },
+}
+
+CIBIL_VALIDATE_OTP_ERROR_MAP = {
+    "ETP011": {"message": "Incorrect OTP", "status_code": status.HTTP_400_BAD_REQUEST},
+    "SOS176": {"message": "OTP expired", "status_code": status.HTTP_400_BAD_REQUEST},
+    "SOS177": {"message": "Maximum OTP attempts exceeded", "status_code": status.HTTP_429_TOO_MANY_REQUESTS},
+    "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
+    "ERR541":{"message":"OTP either expired or not generated yet. Please reinitiate request again", "status_code": status.HTTP_400_BAD_REQUEST},
+    "ECB846": {"message":"Consumer not found in bureau","status_code": status.HTTP_400_BAD_REQUEST},
+
+}
+
+CIBIL_RESEND_OTP_ERROR_CODES = {
+    "SOS174": {
+        "status_code": 200,
+        "message": "OTP successfully sent to mobile number."
+    },
+    "ERU061": {
+        "status_code": 400,
+        "message": "OTP has already been verified."
+    },
+    "ECI419": {
+        "status_code": 500,
+        "message": "Credit Bureau service configuration error. Please try again later."
+    },
+    "EGD509": {
+        "status_code": 502,
+        "message": "Credit Bureau service is currently unavailable. Please try again later."
+    },
+    "ERR541":{
+        "status_code": 400,
+        "message":"OTP either expired or not generated yet. Please reinitiate request again"
     }
 }

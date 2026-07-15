@@ -1,0 +1,132 @@
+[
+  {
+    "bank_name": "Kotak Mahindra Bank",
+    "bank_id": "KTK001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 1000000 },
+        "average_monthly_debit": { "value": 800000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 50000 }
+      }
+    }
+  },
+  {
+    "bank_name": "HDFC Bank",
+    "bank_id": "HDFC001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 1500000 },
+        "average_monthly_debit": { "value": 1200000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 75000 }
+      }
+    }
+  },
+  {
+    "bank_name": "ICICI Bank",
+    "bank_id": "ICICI001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 1800000 },
+        "average_monthly_debit": { "value": 1450000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 90000 }
+      }
+    }
+  },
+  {
+    "bank_name": "Axis Bank",
+    "bank_id": "AXIS001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 900000 },
+        "average_monthly_debit": { "value": 650000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 45000 }
+      }
+    }
+  },
+  {
+    "bank_name": "State Bank of India",
+    "bank_id": "SBI001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 2200000 },
+        "average_monthly_debit": { "value": 1700000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 125000 }
+      }
+    }
+  },
+  {
+    "bank_name": "Punjab National Bank",
+    "bank_id": "PNB001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 850000 },
+        "average_monthly_debit": { "value": 600000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 40000 }
+      }
+    }
+  },
+  {
+    "bank_name": "IndusInd Bank",
+    "bank_id": "INDUS001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 1100000 },
+        "average_monthly_debit": { "value": 900000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 60000 }
+      }
+    }
+  },
+  {
+    "bank_name": "Yes Bank",
+    "bank_id": "YES001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 700000 },
+        "average_monthly_debit": { "value": 500000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 30000 }
+      }
+    }
+  },
+  {
+    "bank_name": "Bank of Baroda",
+    "bank_id": "BOB001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 1300000 },
+        "average_monthly_debit": { "value": 1000000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 70000 }
+      }
+    }
+  },
+  {
+    "bank_name": "Canara Bank",
+    "bank_id": "CAN001",
+    "modules": {
+      "summary_of_debit_and_credit": {
+        "average_monthly_credit": { "value": 950000 },
+        "average_monthly_debit": { "value": 750000 }
+      },
+      "balance_analysis": {
+        "average_balance": { "value": 55000 }
+      }
+    }
+  }
+]

@@ -13,6 +13,9 @@ from controller.backgroud_task_controller import send_report_mail_based_on_reque
 from controller.bsa_summary_drcr_monthwise import bsa_summary_of_debit_credit_monthwise
 from controller.cashflow_controller import build_cashflow_report
 from controller.overview_month_wise import bank_statement_report_consolidated
+from controller.bsa_summary_drcr_monthwise import get_r1xcrm_summary_of_debit_and_credit_monthwise
+from controller.cashflow_controller import r1xcrm_build_cashflow_report
+from controller.overview_month_wise import r1xcrm_bank_statement_report_consolidated
 import json
 from datetime import datetime
 
@@ -100,6 +103,8 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
                 request.app.state.mongo_db,
                 request.app.state.postgres_conn,
             )
+            #update the merge status once the merge request is successfully merged
+            await mongodb_connection["bsa_reference"].update_one({"reference_id": reference_id}, {"$set": {"merge_request_status":"COMPLETED"}})
             return {"status": "success", "message": "Merge result received — report ingestion started"}
 
         merge_status = await is_reference_id_mergable(
@@ -303,3 +308,119 @@ async def report_date_range(
         return await get_report_date_range(user_id=request.state.user_id,db=request.app.state.mongo_db)
     except HTTPException as e:
        raise e
+
+# expose bank statement data to r1xcrm
+
+@bsa_router.get("/r1xcrm-report-date-range/{acc_id}")
+async def r1xcrm_report_date_range(
+    request: Request,
+    acc_id: int
+):
+    try:
+        db=request.app.state.mongo_db
+
+        user_collection = db["users"]
+
+        user = await user_collection.find_one(
+            {"account_id": acc_id},
+            {"_id": 1}
+        )
+
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        user_id = str(user["_id"])
+
+        return await get_report_date_range(user_id=user_id, db=request.app.state.mongo_db)
+    except HTTPException as e:
+       raise e
+
+
+@bsa_router.get("/r1xcrm-summary-of-debit-and-credit_monthwise/{acc_id}")
+async def r1xcrm_summary_of_debit_and_credit_monthwise(
+    request: Request,
+    acc_id: int,
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+):
+    if not from_date or not to_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "from date and to date is required"},
+        )
+
+    try:
+        from_dt = datetime.strptime(from_date, "%Y-%m-%d")
+        to_dt = datetime.strptime(to_date, "%Y-%m-%d").replace(
+            hour=23, minute=59, second=59
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Invalid date format. Use YYYY-MM-DD format"},
+        )
+
+    if from_dt > to_dt:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "From date must be before To date"},
+        )
+
+    delta = to_dt - from_dt
+
+    if delta.days > 730:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Date Range cannot exceed 2 years"},
+        )
+
+    success_data = await get_r1xcrm_summary_of_debit_and_credit_monthwise(
+        request.app.state.mongo_db,
+        acc_id,
+        from_dt,
+        to_dt,
+    )
+
+    return {
+        "status": "success",
+        "msg": "Summary of DEBIT and CREDIT month wise for r1xcrm",
+        "data": success_data,
+    }
+
+
+@bsa_router.get("/r1xcrm-cashflow/{acc_id}")
+async def cashflow_report(
+        request: Request,
+        acc_id: int,
+        from_month: str = Query(..., description="Start month in YYYY-MM format, e.g. 2024-01"),
+        to_month: str = Query(..., description="End month in YYYY-MM format, e.g. 2024-12"),
+):
+    db = request.app.state.mongo_db
+    result = await r1xcrm_build_cashflow_report(db, acc_id, from_month, to_month)
+
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result)
+
+    return result
+
+
+@bsa_router.get("/r1xcrm-month-wise-overview/{acc_id}")
+async def r1xcrm_bsa_report(request: Request, acc_id: int, from_date: Optional[str] = Query(None),to_date: Optional[str] = Query(None)):
+    db = request.app.state.mongo_db
+    if not from_date or not to_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "from date and to date is required"},
+        )
+
+    success_data = await r1xcrm_bank_statement_report_consolidated(db, acc_id, from_date, to_date)
+    if success_data is None:
+        raise HTTPException(status_code=404, detail="Bank statement not found for this user")
+
+    return {
+        "status": "success",
+        "data": success_data
+    }

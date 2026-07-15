@@ -22,6 +22,20 @@ async def authorization(request: Request, call_next):
             r"^/v1/bsa/webhook-response-handler$",
             r"^/webhook/gst-statements$",
             r"^/webhook/itr-service$",
+            r"^/webhook/credit-bureau",
+            r"^/v1/bsa/r1xcrm-summary-of-debit-and-credit_monthwise/\d+$",
+            r"^/v1/bsa/r1xcrm-cashflow/\d+$",
+            r"^/v1/bsa/r1xcrm-month-wise-overview/\d+$",
+            r"^/v1/bsa/r1xcrm-report-date-range/\d+$",
+            r"^/v1/itr/r1xcrm-tax-calculation/\d+$",
+            r"^/v1/itr/r1xcrm-balance_sheet/\d+$",
+            r"^/v1/itr/r1xcrm-profit-and-loss-statement/\d+$",
+            r"^/v1/itr/r1xcrm-ratio-analysis/\d+$",
+            r"^/v1/gst/r1xcrm-gst-ref-status/\d+$",
+            r"^/v1/gst/r1xcrm-overview$",
+            r"^/v1/gst/r1xcrm-top-suppliers-and-customers$",
+            r"^/v1/gst/r1xcrm-monthly-sales-purchase-summary$",
+            r"^/v1/auth/check-r1xchange-account/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
         ]
@@ -43,6 +57,8 @@ async def authorization(request: Request, call_next):
             decoded_jwt_token = get_decoded_jwt_token(token)
             request.state.user_id = decoded_jwt_token['user_id']
             request.state.role = decoded_jwt_token['role']
+            user= request.state.user_id
+            print(f"User ID from middleware: {user}")
         except Exception:
             return JSONResponse(status_code=401, content={'message': 'Invalid Token'})
 
