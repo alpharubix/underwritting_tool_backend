@@ -8,6 +8,8 @@ from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
+
+from config.config import SCOREME_BANK_NAME_URL
 from services.scoreme_service import upload_to_scoreme,create_bsa_ref_document
 from tasks.bsa_tasks import upload_files_to_gcs_and_save_metadata
 import base64
@@ -169,7 +171,7 @@ async def bank_names():
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
-                "https://sm-bsa-sandbox.scoreme.in/bsa/external/getBankNames",
+                SCOREME_BANK_NAME_URL,
                 headers={
                     "clientId": os.getenv("CLIENT_ID"),
                     "clientSecret": os.getenv("CLIENT_SECRET")
