@@ -1,16 +1,30 @@
 import json
+import logging
 import os
 import uuid
-from datetime import timezone, datetime, timedelta
+from datetime import datetime, timezone
+
 import httpx
+from dotenv import load_dotenv
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from starlette import status
-from config.config import SCOREME_GENERATE_CIBIL_OTP_URL, CibilOTPStatus, SCOREME_VALIDATE_CIBIL_OTP_URL, \
-    SCOREME_RESEND_CIBIL_OTP_URL,CibilWebhookStatus
-from custom_exceptions.scoreme_exceptions import raise_cibil_otp_exception, raise_cibil_validate_otp_exception, \
-    raise_cibil_resend_otp_exception
-from dotenv import load_dotenv
+
+from config.config import (
+    SCOREME_GENERATE_CIBIL_OTP_URL,
+    SCOREME_RESEND_CIBIL_OTP_URL,
+    SCOREME_VALIDATE_CIBIL_OTP_URL,
+    CibilOTPStatus,
+    CibilWebhookStatus,
+)
+from custom_exceptions.scoreme_exceptions import (
+    raise_cibil_otp_exception,
+    raise_cibil_resend_otp_exception,
+    raise_cibil_validate_otp_exception,
+)
+
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 async def generate_cibil_report_otp(request)-> JSONResponse:
     try:
@@ -63,7 +77,7 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
                                 "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
                             },json=normalized_payload,timeout=20.0)
 
-        except httpx.TimeoutException as e:
+        except httpx.TimeoutException:
             return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT,content={"message": "Gateway Error", "data": None, "responsecode": "SYS_INT_ERR"})
         print(response.text)
         if response.status_code != 200:
@@ -577,11 +591,9 @@ async def cibil_webhook_consumer(request):
             },
         )
 
-async def get_list_cibil_reports(request) :
+async def get_list_cibil_reports(request,user_id) :
     try:
-        mongo_db = request.app.state.mongo_db
-
-        user_id = request.state.user_id
+        mongo_db = request.app.state.mongo_db        
 
         cibil_report_collection = mongo_db["cibil_report"]
 
@@ -610,15 +622,31 @@ async def get_list_cibil_reports(request) :
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error contact the admin for support","data":None,"responseCode":"SYS_INT_ERR"})
 
 
+async def get_list_r1xcrm_reports(request,acc_id:int):
+    try:
+        db = request.app.state.mongo_db
+
+        user = await db["users"].find_one({"account_id": acc_id})
+
+        if not user:
+            raise HTTPException(status_code=404, detail={"message": "No user found for this account id"})
+
+        return await get_list_cibil_reports(request,user_id=str(user["_id"]))
+    
+    except HTTPException as e:
+        logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
+        raise e
+    except Exception:
+        logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
 
 async def cibil_overview(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
-        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
-                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -667,11 +695,9 @@ async def cibil_overview(reference_id: str, request):
 async def account_summary(reference_id: str, request ):
     try:
         mongo_db = request.app.state.mongo_db
-        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
-                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -715,11 +741,9 @@ async def account_summary(reference_id: str, request ):
 async def payment_history(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
-        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
-                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -765,11 +789,9 @@ async def payment_history(reference_id: str, request):
 async def analysis(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
-        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
-                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
