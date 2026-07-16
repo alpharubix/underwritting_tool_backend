@@ -1,107 +1,187 @@
 import json
 import os
 import uuid
-from datetime import timezone, datetime, timedelta
+from datetime import datetime, timezone
+
 import httpx
+from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 from starlette import status
-from config.config import SCOREME_GENERATE_CIBIL_OTP_URL, CibilOTPStatus, SCOREME_VALIDATE_CIBIL_OTP_URL, \
-    SCOREME_RESEND_CIBIL_OTP_URL,CibilWebhookStatus
-from custom_exceptions.scoreme_exceptions import raise_cibil_otp_exception, raise_cibil_validate_otp_exception, \
-    raise_cibil_resend_otp_exception
-from dotenv import load_dotenv
+
+from config.config import (
+    SCOREME_GENERATE_CIBIL_OTP_URL,
+    SCOREME_RESEND_CIBIL_OTP_URL,
+    SCOREME_VALIDATE_CIBIL_OTP_URL,
+    CibilOTPStatus,
+    CibilWebhookStatus,
+)
+from custom_exceptions.scoreme_exceptions import (
+    raise_cibil_otp_exception,
+    raise_cibil_resend_otp_exception,
+    raise_cibil_validate_otp_exception,
+)
+
 load_dotenv()
 
-async def generate_cibil_report_otp(request)-> JSONResponse:
+
+async def generate_cibil_report_otp(request) -> JSONResponse:
     try:
-        try: #payload data validation
+        try:  # payload data validation
             input = await request.json()
         except json.decoder.JSONDecodeError:
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid JSON","data":None,"responsecode":"SYS_INPUT_ERR"})
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Invalid JSON",
+                    "data": None,
+                    "responsecode": "SYS_INPUT_ERR",
+                },
+            )
 
         if not input:
-         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message": "Payload is empty", "data": None, "responsecode": "SYS_INPUT_ERR"})
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Payload is empty",
+                    "data": None,
+                    "responsecode": "SYS_INPUT_ERR",
+                },
+            )
 
-        default_input_parameter = ["first_name", "last_name", "middle_name","date_of_birth", "gender", "mobile_number", "address", "state", "pincode", "identity"]
+        default_input_parameter = [
+            "first_name",
+            "last_name",
+            "middle_name",
+            "date_of_birth",
+            "gender",
+            "mobile_number",
+            "address",
+            "state",
+            "pincode",
+            "identity",
+        ]
 
         for parameter in default_input_parameter:
             if parameter not in input:
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,
-                                    content={"message": f'{parameter} is required', "data": None, "responsecode": "SYS_INPUT_ERR"})
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "message": f"{parameter} is required",
+                        "data": None,
+                        "responsecode": "SYS_INPUT_ERR",
+                    },
+                )
             elif input[parameter] is None:
-                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message": f'{parameter} value is empty', "data": None, "responsecode": "SYS_INPUT_ERR"})
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "message": f"{parameter} value is empty",
+                        "data": None,
+                        "responsecode": "SYS_INPUT_ERR",
+                    },
+                )
 
         normalized_payload = {
-            "bureauName": [
-                "equifax"
-            ],"firstName": input["first_name"],
-             "middleName": input["middle_name"],
-              "lastName": input["last_name"],
-                "addressList": [
+            "bureauName": ["equifax"],
+            "firstName": input["first_name"],
+            "middleName": input["middle_name"],
+            "lastName": input["last_name"],
+            "addressList": [
                 {
-                  "address":input["address"],
-                  "state": input["state"],
-                  "pinCode": input["pincode"],
+                    "address": input["address"],
+                    "state": input["state"],
+                    "pinCode": input["pincode"],
                 }
-                  ],
-                  "mobileList": [
-                    input["mobile_number"],
-                  ],
-                  "identityList": [
-                   input["identity"],
-                  ],
-                  "dateOfBirth": input["date_of_birth"],
-                  "gender": input["gender"],
-                  "referenceIdFlag": "0",
-                  "vendorResponseFlag": "0"
+            ],
+            "mobileList": [
+                input["mobile_number"],
+            ],
+            "identityList": [
+                input["identity"],
+            ],
+            "dateOfBirth": input["date_of_birth"],
+            "gender": input["gender"],
+            "referenceIdFlag": "0",
+            "vendorResponseFlag": "0",
         }
-        #third party api calling for generating otp
+        # third party api calling for generating otp
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.post(url=SCOREME_GENERATE_CIBIL_OTP_URL,headers={
-                                "clientId": os.getenv("CLIENT_ID"), # Matches your .env
-                                "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
-                            },json=normalized_payload,timeout=20.0)
+                response = await client.post(
+                    url=SCOREME_GENERATE_CIBIL_OTP_URL,
+                    headers={
+                        "clientId": os.getenv("CLIENT_ID"),  # Matches your .env
+                        "clientSecret": os.getenv("CLIENT_SECRET"),  # Matches your .env
+                    },
+                    json=normalized_payload,
+                    timeout=20.0,
+                )
 
-        except httpx.TimeoutException as e:
-            return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT,content={"message": "Gateway Error", "data": None, "responsecode": "SYS_INT_ERR"})
+        except httpx.TimeoutException:
+            return JSONResponse(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                content={
+                    "message": "Gateway Error",
+                    "data": None,
+                    "responsecode": "SYS_INT_ERR",
+                },
+            )
         print(response.text)
         if response.status_code != 200:
-            return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                                content={"message": "Service Unavailable", "data": None, "responsecode": "SYS_INT_ERR"})
-
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "message": "Service Unavailable",
+                    "data": None,
+                    "responsecode": "SYS_INT_ERR",
+                },
+            )
 
         api_response = response.json()
 
-
-        if api_response["responseCode"] == "SOS174": #success fall back
-
+        if api_response["responseCode"] == "SOS174":  # success fall back
             otp_flow_id = str(uuid.uuid4())
 
-            construct_cibil_otp_manager = { #constructing otp management object
-                "user_id":request.state.user_id,
-                "otp_flow_id":otp_flow_id,
-                "vendor":"equifax",
-                "reference_id":api_response.get("data").get("referenceId"),
-                "otp_status":CibilOTPStatus.OTP_SENT.value,
-                "otp_generated_at":datetime.now(timezone.utc),
+            construct_cibil_otp_manager = {  # constructing otp management object
+                "user_id": request.state.user_id,
+                "otp_flow_id": otp_flow_id,
+                "vendor": "equifax",
+                "reference_id": api_response.get("data").get("referenceId"),
+                "otp_status": CibilOTPStatus.OTP_SENT.value,
+                "otp_generated_at": datetime.now(timezone.utc),
                 "verification_attempts": 0,
                 "resend_attempts": 0,
-                "webhook_message":None,
-                "webhook_status":CibilWebhookStatus.PENDING.value,
-                "created_at":datetime.now(timezone.utc),
-                "updated_at":datetime.now(timezone.utc)
-
+                "webhook_message": None,
+                "webhook_status": CibilWebhookStatus.PENDING.value,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(timezone.utc),
             }
 
-            coll = await request.app.state.mongo_db["cibil_otp_manager"].insert_one(construct_cibil_otp_manager)
-            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":api_response.get("responseMessage"),"data":{"otp_flow_id":otp_flow_id},"responseCode":api_response.get("responseCode")})
+            coll = await request.app.state.mongo_db["cibil_otp_manager"].insert_one(
+                construct_cibil_otp_manager
+            )
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "message": api_response.get("responseMessage"),
+                    "data": {"otp_flow_id": otp_flow_id},
+                    "responseCode": api_response.get("responseCode"),
+                },
+            )
 
-        return raise_cibil_otp_exception(api_response) #failure fall back
+        return raise_cibil_otp_exception(api_response)  # failure fall back
 
     except Exception as e:
-        print("This is the error",e)
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error","data":None,"responsecode":"SYS_INT_ERR"})
+        print("This is the error", e)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error",
+                "data": None,
+                "responsecode": "SYS_INT_ERR",
+            },
+        )
+
 
 async def validate_cibil_otp(request):
     try:
@@ -163,7 +243,9 @@ async def validate_cibil_otp(request):
                 },
             )
 
-        if otp_document["otp_status"] == CibilOTPStatus.OTP_VERIFIED.value: #verification check to eliminate duplicate api call
+        if (
+            otp_document["otp_status"] == CibilOTPStatus.OTP_VERIFIED.value
+        ):  # verification check to eliminate duplicate api call
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -192,7 +274,7 @@ async def validate_cibil_otp(request):
         #         },
         #     )
 
-        if otp_document["verification_attempts"] >= 3: #total attempts check
+        if otp_document["verification_attempts"] >= 3:  # total attempts check
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -202,10 +284,12 @@ async def validate_cibil_otp(request):
                 },
             )
 
-        await coll.update_one( #update the total number of attempts
+        await coll.update_one(  # update the total number of attempts
             {"_id": otp_document["_id"]},
             {
-                "$inc": {"verification_attempts": otp_document["verification_attempts"] + 1},
+                "$inc": {
+                    "verification_attempts": otp_document["verification_attempts"] + 1
+                },
                 "$set": {"updated_at": datetime.now(timezone.utc)},
             },
         )
@@ -242,7 +326,6 @@ async def validate_cibil_otp(request):
         api_response = response.json()
 
         if api_response["responseCode"] == "SRS016":
-
             await coll.update_one(
                 {"_id": otp_document["_id"]},
                 {
@@ -258,13 +341,11 @@ async def validate_cibil_otp(request):
                 status_code=status.HTTP_200_OK,
                 content={
                     "message": api_response["responseMessage"],
-                    "data": {
-                        "otp_flow_id": payload["otp_flow_id"]
-                    },
+                    "data": {"otp_flow_id": payload["otp_flow_id"]},
                     "responseCode": api_response["responseCode"],
                 },
             )
-        if api_response["responseCode"] == "ERR541": #update the tp status to expired
+        if api_response["responseCode"] == "ERR541":  # update the tp status to expired
             await coll.update_one(
                 {"_id": otp_document["_id"]},
                 {
@@ -286,6 +367,7 @@ async def validate_cibil_otp(request):
                 "responseCode": "SYS_INT_ERR",
             },
         )
+
 
 async def resend_cibil_otp(request):
     try:
@@ -365,9 +447,7 @@ async def resend_cibil_otp(request):
                 },
             )
 
-        normalized_payload = {
-            "referenceId": otp_document["reference_id"]
-        }
+        normalized_payload = {"referenceId": otp_document["reference_id"]}
 
         try:
             async with httpx.AsyncClient() as client:
@@ -474,10 +554,17 @@ async def cibil_webhook_consumer(request):
         otp_manager = mongo_db["cibil_otp_manager"]
 
         # Common function to update webhook message
-        async def update_webhook_message(webhook_status=CibilWebhookStatus.PENDING.value):
+        async def update_webhook_message(
+            webhook_status=CibilWebhookStatus.PENDING.value,
+        ):
             await otp_manager.update_one(
                 {"reference_id": reference_id},
-                {"$set": {"webhook_message": message,"webhook_status":webhook_status}},
+                {
+                    "$set": {
+                        "webhook_message": message,
+                        "webhook_status": webhook_status,
+                    }
+                },
             )
 
         if response_code == "EOV841":
@@ -548,9 +635,9 @@ async def cibil_webhook_consumer(request):
         cibil_report = {
             "user_id": cibil_otp_doc["user_id"],
             "reference_id": reference_id,
-            "cibil_report":response.json(),
+            "cibil_report": response.json(),
             "cibil_pulled_date": datetime.now(timezone.utc),
-            "source_urls":data,
+            "source_urls": data,
             "created_at": datetime.now(timezone.utc),
             "updated_at": None,
         }
@@ -577,7 +664,8 @@ async def cibil_webhook_consumer(request):
             },
         )
 
-async def get_list_cibil_reports(request) :
+
+async def get_list_cibil_reports(request):
     try:
         mongo_db = request.app.state.mongo_db
 
@@ -586,14 +674,17 @@ async def get_list_cibil_reports(request) :
         cibil_report_collection = mongo_db["cibil_report"]
 
         cursor = cibil_report_collection.find(
-            {"user_id": user_id},
-            {"_id": 0, "reference_id": 1, "cibil_pulled_date": 1}
+            {"user_id": user_id}, {"_id": 0, "reference_id": 1, "cibil_pulled_date": 1}
         )
 
         list_cibil_reports = await cursor.to_list(length=None)
 
         for cibil_report in list_cibil_reports:
-            cibil_report["cibil_pulled_date"] = cibil_report["cibil_pulled_date"].isoformat()
+            pulled_date = cibil_report.get("cibil_pulled_date")
+            if hasattr(pulled_date, "date"):
+                cibil_report["cibil_pulled_date"] = pulled_date.date().isoformat()
+            elif hasattr(pulled_date, "isoformat"):
+                cibil_report["cibil_pulled_date"] = pulled_date.isoformat()
 
         print(list_cibil_reports)
 
@@ -606,9 +697,15 @@ async def get_list_cibil_reports(request) :
             },
         )
     except Exception as err:
-        print("Error in get_list_cibil_reports",err)
-        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error contact the admin for support","data":None,"responseCode":"SYS_INT_ERR"})
-
+        print("Error in get_list_cibil_reports", err)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Internal server error contact the admin for support",
+                "data": None,
+                "responseCode": "SYS_INT_ERR",
+            },
+        )
 
 
 async def cibil_overview(reference_id: str, request):
@@ -630,7 +727,6 @@ async def cibil_overview(reference_id: str, request):
             },
         )
 
-
         if cibil_report is None:
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -641,7 +737,9 @@ async def cibil_overview(reference_id: str, request):
                 },
             )
 
-        cibil_report["cibil_pulled_date"] = cibil_report["cibil_pulled_date"].isoformat()
+        cibil_report["cibil_pulled_date"] = cibil_report[
+            "cibil_pulled_date"
+        ].isoformat()
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -664,7 +762,8 @@ async def cibil_overview(reference_id: str, request):
             },
         )
 
-async def account_summary(reference_id: str, request ):
+
+async def account_summary(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
         user_id = request.state.user_id
@@ -711,6 +810,7 @@ async def account_summary(reference_id: str, request ):
                 "responseCode": "SYS_INT_ERR",
             },
         )
+
 
 async def payment_history(reference_id: str, request):
     try:
@@ -810,15 +910,18 @@ async def analysis(reference_id: str, request):
             },
         )
 
-async def otp_flow_id_webhook_status(otp_flow_id,request):
+
+async def otp_flow_id_webhook_status(otp_flow_id, request):
     try:
         mongo_db = request.app.state.mongo_db
         user_id = request.state.user_id
         report_status = CibilWebhookStatus.IN_PROGRESS
 
-        webhook_status = await mongo_db["cibil_otp_manager"].find_one({"user_id": user_id,"otp_flow_id":otp_flow_id},{"webhook_status":1})
+        webhook_status = await mongo_db["cibil_otp_manager"].find_one(
+            {"user_id": user_id, "otp_flow_id": otp_flow_id}, {"webhook_status": 1}
+        )
 
-        if webhook_status :
+        if webhook_status:
             if webhook_status["webhook_status"] == CibilWebhookStatus.PENDING.value:
                 report_status = CibilWebhookStatus.IN_PROGRESS.value
             elif webhook_status["webhook_status"] == CibilWebhookStatus.SUCCESS.value:
@@ -827,13 +930,22 @@ async def otp_flow_id_webhook_status(otp_flow_id,request):
                 report_status = CibilWebhookStatus.FAILED.value
 
         else:
-
             return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid otp_flow_id","data":None,"responseCode":"SYS_INPUT_ERR"},
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Invalid otp_flow_id",
+                    "data": None,
+                    "responseCode": "SYS_INPUT_ERR",
+                },
             )
 
         return JSONResponse(
-            status_code=status.HTTP_200_OK,content={"message":"Otp webhook status fetched successdfully","data":{"webhook_status":report_status},"responseCode":"SYS_OK"},
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Otp webhook status fetched successdfully",
+                "data": {"webhook_status": report_status},
+                "responseCode": "SYS_OK",
+            },
         )
     except Exception as e:
         print("Error in get_cibil_analysis:", e)
@@ -846,60 +958,3 @@ async def otp_flow_id_webhook_status(otp_flow_id,request):
                 "responseCode": "SYS_INT_ERR",
             },
         )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
