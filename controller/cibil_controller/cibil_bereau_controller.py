@@ -76,7 +76,7 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
 
         if api_response["responseCode"] == "SOS174": #success fall back
 
-            otp_flow_id = str(uuid.uuid6())
+            otp_flow_id = str(uuid.uuid4())
 
             construct_cibil_otp_manager = { #constructing otp management object
                 "user_id":request.state.user_id,
