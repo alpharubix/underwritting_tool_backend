@@ -30,6 +30,7 @@ from routes.gst_router import gst_router
 from routes.itr_router import itr_router
 from routes.kyc_router import kyc_router
 from routes.cibil_router import cibil_router
+from routes.ticktes_router import ticket_router
 
 
 logger = logging.getLogger(__name__)
@@ -65,16 +66,14 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(bsa_router)
-
 app.include_router(webhook_router)
-
 app.include_router(gst_router)
-
 app.include_router(itr_router)
 app.include_router(kyc_router)
 app.include_router(cibil_router)
-
 app.include_router(bank_scoring_router)
+app.include_router(ticket_router)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
