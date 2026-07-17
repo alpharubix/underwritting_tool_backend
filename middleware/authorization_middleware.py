@@ -36,6 +36,11 @@ async def authorization(request: Request, call_next):
             r"^/v1/gst/r1xcrm-top-suppliers-and-customers$",
             r"^/v1/gst/r1xcrm-monthly-sales-purchase-summary$",
             r"^/v1/auth/check-r1xchange-account/\d+$",
+            r"^/v1/cibil/r1xcrm-list-reports/\d+$",
+            r"^/v1/cibil/r1xcrm-overview/[\w-]+$",
+            r"^/v1/cibil/r1xcrm-account-summary/[\w-]+$",
+            r"^/v1/cibil/r1xcrm-payment-history/[\w-]+$",
+            r"^/v1/cibil/r1xcrm-analysis/[\w-]+$",
             r"^/docs$",
             r"^/openapi.json$",
         ]
