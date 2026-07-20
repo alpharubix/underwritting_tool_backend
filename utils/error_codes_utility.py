@@ -54,7 +54,7 @@ SCOREME_GST_BASIC_INFO_ERROR_MAP = {
         "Unable To Process. Please Reach Out To Support."
     ),
 
-    "EGI404": (
+    "EGN014": (
         status.HTTP_404_NOT_FOUND,
         "GSTIN Not found Or Incorrect GSTIN."
     ),
@@ -89,7 +89,7 @@ SCOREME_GST_OTP_ERROR_MAP = {
         "status_code": 500,
         "message": "GST OTP generation unsuccessful."
     },
-    "EGN014": {
+    "EAA049": {
         "status_code": 401,
         "message": "API Access/GSTIN Username Error."
     },
