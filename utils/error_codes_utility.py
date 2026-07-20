@@ -89,7 +89,7 @@ SCOREME_GST_OTP_ERROR_MAP = {
         "status_code": 500,
         "message": "GST OTP generation unsuccessful."
     },
-    "EAA049": {
+    "EGN014": {
         "status_code": 401,
         "message": "API Access/GSTIN Username Error."
     },
@@ -545,6 +545,7 @@ CIBIL_VALIDATE_OTP_ERROR_MAP = {
     "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
     "ERR541":{"message":"OTP either expired or not generated yet. Please reinitiate request again", "status_code": status.HTTP_400_BAD_REQUEST},
     "ECB846": {"message":"Consumer not found in bureau","status_code": status.HTTP_400_BAD_REQUEST},
+    "EPN492":{"message":"Phone number does not match with Bureau","status_code": status.HTTP_400_BAD_REQUEST}
 
 }
 
