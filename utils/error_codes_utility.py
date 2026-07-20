@@ -54,7 +54,7 @@ SCOREME_GST_BASIC_INFO_ERROR_MAP = {
         "Unable To Process. Please Reach Out To Support."
     ),
 
-    "EGI404": (
+    "EGN014": (
         status.HTTP_404_NOT_FOUND,
         "GSTIN Not found Or Incorrect GSTIN."
     ),
@@ -545,7 +545,7 @@ CIBIL_VALIDATE_OTP_ERROR_MAP = {
     "SOS178": {"message": "OTP not found", "status_code": status.HTTP_404_NOT_FOUND},
     "ERR541":{"message":"OTP either expired or not generated yet. Please reinitiate request again", "status_code": status.HTTP_400_BAD_REQUEST},
     "ECB846": {"message":"Consumer not found in bureau","status_code": status.HTTP_400_BAD_REQUEST},
-
+    "EPN492":{"message":"Phone number does not match with Bureau","status_code": status.HTTP_400_BAD_REQUEST},
 }
 
 CIBIL_RESEND_OTP_ERROR_CODES = {
