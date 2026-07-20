@@ -1,12 +1,8 @@
 import json
-import logging
 import os
 import uuid
-from datetime import datetime, timezone
-
+from datetime import timezone, datetime, timedelta
 import httpx
-from dotenv import load_dotenv
-from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from starlette import status
 
@@ -24,7 +20,6 @@ from custom_exceptions.scoreme_exceptions import (
 )
 
 load_dotenv()
-logger = logging.getLogger(__name__)
 
 async def generate_cibil_report_otp(request)-> JSONResponse:
     try:
@@ -77,7 +72,7 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
                                 "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
                             },json=normalized_payload,timeout=20.0)
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT,content={"message": "Gateway Error", "data": None, "responsecode": "SYS_INT_ERR"})
         print(response.text)
         if response.status_code != 200:
@@ -591,9 +586,11 @@ async def cibil_webhook_consumer(request):
             },
         )
 
-async def get_list_cibil_reports(request,user_id) :
+async def get_list_cibil_reports(request) :
     try:
-        mongo_db = request.app.state.mongo_db        
+        mongo_db = request.app.state.mongo_db
+
+        user_id = request.state.user_id
 
         cibil_report_collection = mongo_db["cibil_report"]
 
@@ -632,7 +629,7 @@ async def get_list_r1xcrm_reports(request,acc_id:int):
             raise HTTPException(status_code=404, detail={"message": "No user found for this account id"})
 
         return await get_list_cibil_reports(request,user_id=str(user["_id"]))
-    
+
     except HTTPException as e:
         logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
         raise e
@@ -644,9 +641,11 @@ async def get_list_r1xcrm_reports(request,acc_id:int):
 async def cibil_overview(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
+                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -695,9 +694,11 @@ async def cibil_overview(reference_id: str, request):
 async def account_summary(reference_id: str, request ):
     try:
         mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
+                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -741,9 +742,11 @@ async def account_summary(reference_id: str, request ):
 async def payment_history(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
+                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
@@ -789,9 +792,11 @@ async def payment_history(reference_id: str, request):
 async def analysis(reference_id: str, request):
     try:
         mongo_db = request.app.state.mongo_db
+        user_id = request.state.user_id
 
         cibil_report = await mongo_db["cibil_report"].find_one(
             {
+                "user_id": user_id,
                 "reference_id": reference_id,
             },
             {
