@@ -31,7 +31,7 @@ from routes.itr_router import itr_router
 from routes.kyc_router import kyc_router
 from routes.cibil_router import cibil_router
 from routes.ticktes_router import ticket_router
-
+from routes.lending_router import lending_router
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
@@ -73,7 +73,7 @@ app.include_router(kyc_router)
 app.include_router(cibil_router)
 app.include_router(bank_scoring_router)
 app.include_router(ticket_router)
-
+app.include_router(lending_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8080))
