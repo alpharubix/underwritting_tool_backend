@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 import asyncio
-
 from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
 from routes.bank_scoring_routes import bank_scoring_router
 
