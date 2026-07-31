@@ -176,6 +176,9 @@ async def get_accounts_filter(
     if module_key == "cibil":
         del projection["score"]
         projection["cibil_report.EquifaxRetail.BureauAnalysis.score"] = 1
+    elif module_key == "bsa":
+        projection["account_details.Account Number"] = 1
+        projection["account_details.Account Type"] = 1
     projection["_id"] = 0
 
     documents = await collection.find(query, projection).to_list(length=None)
@@ -210,8 +213,89 @@ async def get_accounts_filter(
                     .get("BureauAnalysis", {})
                     .get("score")
                 )
+            elif module_key == "gst" and field == "webhook_received_time":
+                formatted_doc["created_at"] = doc.get("webhook_received_time")
             else:
                 formatted_doc[field] = doc.get(field)
+
+        if module_key == "bsa":
+            account_details = doc.get("account_details", {})
+            formatted_doc["account_number"] = account_details.get("Account Number")
+            formatted_doc["account_type"] = account_details.get("Account Type")
+
         response_data.append(formatted_doc)
+
+    return {"message": "success", "data": response_data}
+
+
+@accounts_filter_router.get("/accounts-filter/{account_id}")
+async def get_all_modules_by_account_id(
+    account_id: str,
+    request: Request,
+):
+    db = request.app.state.mongo_db
+
+    account_id_int = None
+    try:
+        account_id_int = int(account_id)
+    except ValueError:
+        pass
+
+    query_cond = [{"account_id": account_id}]
+    if account_id_int is not None:
+        query_cond.append({"account_id": account_id_int})
+
+    user = await db["users"].find_one({"$or": query_cond})
+
+    if not user:
+        raise HTTPException(
+            status_code=404, detail=f"User with account_id {account_id} not found"
+        )
+
+    user_id = str(user["_id"])
+
+    response_data = {}
+
+    for module_key, config in MODULE_CONFIG.items():
+        collection = db[config["collection"]]
+
+        projection = {field: 1 for field in config["fields"]}
+        if module_key == "cibil":
+            if "score" in projection:
+                del projection["score"]
+            projection["cibil_report.EquifaxRetail.BureauAnalysis.score"] = 1
+        elif module_key == "bsa":
+            projection["account_details.Account Number"] = 1
+            projection["account_details.Account Type"] = 1
+        projection["_id"] = 0
+
+        documents = await collection.find(
+            {"user_id": user_id}, projection
+        ).to_list(length=None)
+
+        formatted_docs = []
+        for doc in documents:
+            formatted_doc = {"account_id": user.get("account_id")}
+            for field in config["fields"]:
+                if module_key == "cibil" and field == "score":
+                    formatted_doc["score"] = (
+                        doc.get("cibil_report", {})
+                        .get("EquifaxRetail", {})
+                        .get("BureauAnalysis", {})
+                        .get("score")
+                    )
+                elif module_key == "gst" and field == "webhook_received_time":
+                    formatted_doc["created_at"] = doc.get("webhook_received_time")
+                else:
+                    formatted_doc[field] = doc.get(field)
+
+            if module_key == "bsa":
+                account_details = doc.get("account_details", {})
+                formatted_doc["account_number"] = account_details.get("Account Number")
+                formatted_doc["account_type"] = account_details.get("Account Type")
+
+            formatted_docs.append(formatted_doc)
+
+        response_data[module_key] = formatted_docs
 
     return {"message": "success", "data": response_data}
