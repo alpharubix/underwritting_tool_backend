@@ -1,13 +1,25 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
 
 import uvicorn
+from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-import asyncio
 
-from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
+from controller.bsa_uploads import UploadHashMap
+from database.databse_config import get_mongo_db, get_postgres_conn
+from middleware.authorization_middleware import authorization
+from routes.accounts_filter_router import accounts_filter_router
+from routes.auth_router import auth_router
 from routes.bank_scoring_routes import bank_scoring_router
+from routes.bsa_route import bsa_router
+from routes.cibil_router import cibil_router
+from routes.gst_router import gst_router
+from routes.itr_router import itr_router
+from routes.kyc_router import kyc_router
+from routes.user_route import user_router
+from routes.webhook_router import webhook_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,20 +29,6 @@ logging.basicConfig(
 
 logging.getLogger("motor").setLevel(logging.WARNING)
 logging.getLogger("pymongo").setLevel(logging.WARNING)
-
-from database.databse_config import get_mongo_db,get_postgres_conn
-from fastapi import FastAPI
-from routes.auth_router import auth_router
-from routes.user_route import user_router
-from middleware.authorization_middleware import authorization
-from routes.bsa_route import bsa_router
-from routes.webhook_router import webhook_router
-from controller.bsa_uploads import UploadHashMap
-from routes.gst_router import gst_router
-from routes.itr_router import itr_router
-from routes.kyc_router import kyc_router
-from routes.cibil_router import cibil_router
-
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
@@ -43,11 +41,11 @@ async def connect_to_databases(app: FastAPI): #database first approch
         print('database connected successfully')
         upload_hashmap = UploadHashMap()
         asyncio.create_task(upload_hashmap.clean_expired_entries())
-        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
+        # asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
-        raise e
+        raise
 
 
 app = FastAPI(lifespan=connect_to_databases)
@@ -64,6 +62,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(user_router)
+app.include_router(accounts_filter_router)
 app.include_router(bsa_router)
 
 app.include_router(webhook_router)
@@ -77,5 +76,5 @@ app.include_router(cibil_router)
 app.include_router(bank_scoring_router)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
+    port = int(os.getenv("PORT", "5050"))
     uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
