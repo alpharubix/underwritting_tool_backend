@@ -3,7 +3,6 @@ import re
 from fastapi import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from starlette import status
 
 from utils.auth_utility import get_decoded_jwt_token
 
@@ -41,6 +40,8 @@ async def authorization(request: Request, call_next):
             r"^/v1/cibil/r1xcrm-account-summary/[\w-]+$",
             r"^/v1/cibil/r1xcrm-payment-history/[\w-]+$",
             r"^/v1/cibil/r1xcrm-analysis/[\w-]+$",
+            r"^/v1/crm/accounts-filter$",
+            r"^/v1/crm/accounts-filter/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
         ]
