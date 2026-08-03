@@ -33,6 +33,16 @@ def parse_date(date_str: str, is_end: bool = False):
         pass
 
     try:
+        dt = datetime.strptime(date_str, "%Y")
+        if is_end:
+            dt = dt.replace(
+                month=12, day=31, hour=23, minute=59, second=59, microsecond=999999
+            )
+        return dt
+    except ValueError:
+        pass
+
+    try:
         dt = datetime.fromisoformat(date_str)
         if is_end:
             dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -71,10 +81,12 @@ MODULE_CONFIG = {
             "user_id",
             "reference_id",
             "created_at",
+            "from_year",
+            "to_year",
         ],
-        "period_from_field": None,  # from_date/to_date intentionally not applied to itr
-        "period_to_field": None,
-        "period_type": None,
+        "period_from_field": "from_year",
+        "period_to_field": "to_year",
+        "period_type": "itr_year",
         "created_at_field": "created_at",
     },
     "cibil": {
@@ -94,7 +106,36 @@ def build_period_match(config: dict, from_date: datetime, to_date: datetime) -> 
     period_to_field = config["period_to_field"]
     period_type = config["period_type"]
 
-    if not period_from_field or not period_to_field or not from_date or not to_date:
+    if not from_date or not to_date:
+        return {}
+
+    if period_type == "itr_year":
+        return {
+            "$and": [
+                {
+                    "$or": [
+                        {"report.General Information.General Information.0.Year": {"$gte": from_date.year}},
+                        {"report.General Information.General Information.0.year": {"$gte": from_date.year}},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"report.General Information.General Information.1.Year": {"$lte": to_date.year}},
+                        {"report.General Information.General Information.1.year": {"$lte": to_date.year}},
+                        {
+                            "report.General Information.General Information.1": {"$exists": False},
+                            "report.General Information.General Information.0.Year": {"$lte": to_date.year}
+                        },
+                        {
+                            "report.General Information.General Information.1": {"$exists": False},
+                            "report.General Information.General Information.0.year": {"$lte": to_date.year}
+                        }
+                    ]
+                }
+            ]
+        }
+
+    if not period_from_field or not period_to_field:
         return {}
 
     if period_type == "date":
@@ -179,6 +220,12 @@ async def get_accounts_filter(
     elif module_key == "bsa":
         projection["account_details.Account Number"] = 1
         projection["account_details.Account Type"] = 1
+    elif module_key == "itr":
+        if "from_year" in projection:
+            del projection["from_year"]
+        if "to_year" in projection:
+            del projection["to_year"]
+        projection["report.General Information.General Information"] = 1
     projection["_id"] = 0
 
     documents = await collection.find(query, projection).to_list(length=None)
@@ -215,6 +262,8 @@ async def get_accounts_filter(
                 )
             elif module_key == "gst" and field == "webhook_received_time":
                 formatted_doc["created_at"] = doc.get("webhook_received_time")
+            elif module_key == "itr" and field in ["from_year", "to_year"]:
+                pass
             else:
                 formatted_doc[field] = doc.get(field)
 
@@ -222,6 +271,21 @@ async def get_accounts_filter(
             account_details = doc.get("account_details", {})
             formatted_doc["account_number"] = account_details.get("Account Number")
             formatted_doc["account_type"] = account_details.get("Account Type")
+        elif module_key == "itr":
+            gen_info = doc.get("report", {}).get("General Information", {}).get("General Information", [])
+            if gen_info and isinstance(gen_info, list) and len(gen_info) > 0:
+                first_year = gen_info[0].get("Year")
+                if first_year is None:
+                    first_year = gen_info[0].get("year")
+                formatted_doc["from_year"] = first_year
+                
+                if len(gen_info) > 1:
+                    second_year = gen_info[1].get("Year")
+                    if second_year is None:
+                        second_year = gen_info[1].get("year")
+                    formatted_doc["to_year"] = second_year
+                else:
+                    formatted_doc["to_year"] = first_year
 
         response_data.append(formatted_doc)
 
@@ -267,6 +331,12 @@ async def get_all_modules_by_account_id(
         elif module_key == "bsa":
             projection["account_details.Account Number"] = 1
             projection["account_details.Account Type"] = 1
+        elif module_key == "itr":
+            if "from_year" in projection:
+                del projection["from_year"]
+            if "to_year" in projection:
+                del projection["to_year"]
+            projection["report.General Information.General Information"] = 1
         projection["_id"] = 0
 
         documents = await collection.find(
@@ -286,6 +356,8 @@ async def get_all_modules_by_account_id(
                     )
                 elif module_key == "gst" and field == "webhook_received_time":
                     formatted_doc["created_at"] = doc.get("webhook_received_time")
+                elif module_key == "itr" and field in ["from_year", "to_year"]:
+                    pass
                 else:
                     formatted_doc[field] = doc.get(field)
 
@@ -293,6 +365,21 @@ async def get_all_modules_by_account_id(
                 account_details = doc.get("account_details", {})
                 formatted_doc["account_number"] = account_details.get("Account Number")
                 formatted_doc["account_type"] = account_details.get("Account Type")
+            elif module_key == "itr":
+                gen_info = doc.get("report", {}).get("General Information", {}).get("General Information", [])
+                if gen_info and isinstance(gen_info, list) and len(gen_info) > 0:
+                    first_year = gen_info[0].get("Year")
+                    if first_year is None:
+                        first_year = gen_info[0].get("year")
+                    formatted_doc["from_year"] = first_year
+                    
+                    if len(gen_info) > 1:
+                        second_year = gen_info[1].get("Year")
+                        if second_year is None:
+                            second_year = gen_info[1].get("year")
+                        formatted_doc["to_year"] = second_year
+                    else:
+                        formatted_doc["to_year"] = first_year
 
             formatted_docs.append(formatted_doc)
 
