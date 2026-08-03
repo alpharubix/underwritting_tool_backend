@@ -76,5 +76,5 @@ app.include_router(cibil_router)
 app.include_router(bank_scoring_router)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "5050"))
+    port = int(os.getenv("PORT", "8080"))
     uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
