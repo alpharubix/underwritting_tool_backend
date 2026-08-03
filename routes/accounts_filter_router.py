@@ -1,5 +1,6 @@
 import calendar
 from datetime import datetime
+from typing import List
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -177,117 +178,139 @@ def build_period_match(config: dict, from_date: datetime, to_date: datetime) -> 
 @accounts_filter_router.get("/accounts-filter")
 async def get_accounts_filter(
     request: Request,
-    module: str = Query(...),
+    module: List[str] = Query(...),
     created_at: str = Query(None),
     from_date: str = Query(None),
     to_date: str = Query(None),
 ):
     db = request.app.state.mongo_db
-    module_key = module.lower()
-
-    if module_key not in MODULE_CONFIG:
-        raise HTTPException(status_code=400, detail=f"Unsupported module: {module}")
-
-    config = MODULE_CONFIG[module_key]
-    collection = db[config["collection"]]
-
-    query: dict = {}
-
-    # --- created_at filter (single day) ---
-    parsed_created_at = parse_date(created_at)
-    if parsed_created_at:
-        created_field = config["created_at_field"]
-        query[created_field] = {
-            "$gte": parsed_created_at.replace(
-                hour=0, minute=0, second=0, microsecond=0
-            ),
-            "$lte": parsed_created_at.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            ),
-        }
-
-    # --- period filter: ONE call covers bsa / gst / itr; cibil returns {} ---
-    # from_date=2025-01&to_date=2025-12 -> Jan 2025 through the last day of Dec 2025
-    parsed_from = parse_date(from_date)
-    parsed_to = parse_date(to_date, is_end=True)
-    query.update(build_period_match(config, parsed_from, parsed_to))
-
-    # --- projection ---
-    projection = {field: 1 for field in config["fields"]}
-    if module_key == "cibil":
-        del projection["score"]
-        projection["cibil_report.EquifaxRetail.BureauAnalysis.score"] = 1
-    elif module_key == "bsa":
-        projection["account_details.Account Number"] = 1
-        projection["account_details.Account Type"] = 1
-    elif module_key == "itr":
-        if "from_year" in projection:
-            del projection["from_year"]
-        if "to_year" in projection:
-            del projection["to_year"]
-        projection["report.General Information.General Information"] = 1
-    projection["_id"] = 0
-
-    documents = await collection.find(query, projection).to_list(length=None)
-
-    # --- resolve account_ids ---
-    user_ids = list({doc.get("user_id") for doc in documents if doc.get("user_id")})
-    valid_object_ids = []
-    for uid in user_ids:
-        try:
-            valid_object_ids.append(ObjectId(uid))
-        except InvalidId:
-            pass
-
-    user_account_map = {}
-    if valid_object_ids:
-        users = (
-            await db["users"]
-            .find({"_id": {"$in": valid_object_ids}}, {"account_id": 1})
-            .to_list(length=None)
-        )
-        user_account_map = {str(u["_id"]): u.get("account_id") for u in users}
-
-    response_data = []
-    for doc in documents:
-        user_id = doc.get("user_id")
-        formatted_doc = {"account_id": user_account_map.get(user_id)}
-        for field in config["fields"]:
-            if module_key == "cibil" and field == "score":
-                formatted_doc["score"] = (
-                    doc.get("cibil_report", {})
-                    .get("EquifaxRetail", {})
-                    .get("BureauAnalysis", {})
-                    .get("score")
-                )
-            elif module_key == "gst" and field == "webhook_received_time":
-                formatted_doc["created_at"] = doc.get("webhook_received_time")
-            elif module_key == "itr" and field in ["from_year", "to_year"]:
-                pass
-            else:
-                formatted_doc[field] = doc.get(field)
-
-        if module_key == "bsa":
-            account_details = doc.get("account_details", {})
-            formatted_doc["account_number"] = account_details.get("Account Number")
-            formatted_doc["account_type"] = account_details.get("Account Type")
-        elif module_key == "itr":
-            gen_info = doc.get("report", {}).get("General Information", {}).get("General Information", [])
-            if gen_info and isinstance(gen_info, list) and len(gen_info) > 0:
-                first_year = gen_info[0].get("Year")
-                if first_year is None:
-                    first_year = gen_info[0].get("year")
-                formatted_doc["from_year"] = first_year
+    
+    modules_to_process = []
+    for m in module:
+        for sub_m in m.split(','):
+            sub_m = sub_m.strip().lower()
+            if sub_m:
+                if sub_m not in MODULE_CONFIG:
+                    raise HTTPException(status_code=400, detail=f"Unsupported module: {sub_m}")
+                modules_to_process.append(sub_m)
                 
-                if len(gen_info) > 1:
-                    second_year = gen_info[1].get("Year")
-                    if second_year is None:
-                        second_year = gen_info[1].get("year")
-                    formatted_doc["to_year"] = second_year
-                else:
-                    formatted_doc["to_year"] = first_year
+    modules_to_process = list(dict.fromkeys(modules_to_process))
+    
+    if not modules_to_process:
+        raise HTTPException(status_code=400, detail="No valid modules provided")
 
-        response_data.append(formatted_doc)
+    is_single_module = len(modules_to_process) == 1
+    response_data = [] if is_single_module else {}
+
+    for module_key in modules_to_process:
+        config = MODULE_CONFIG[module_key]
+        collection = db[config["collection"]]
+
+        query: dict = {}
+
+        # --- created_at filter (single day) ---
+        mod_created_at = request.query_params.get(f"{module_key}_created_at", created_at)
+        parsed_created_at = parse_date(mod_created_at)
+        if parsed_created_at:
+            created_field = config["created_at_field"]
+            query[created_field] = {
+                "$gte": parsed_created_at.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ),
+                "$lte": parsed_created_at.replace(
+                    hour=23, minute=59, second=59, microsecond=999999
+                ),
+            }
+
+        # --- period filter: ONE call covers bsa / gst / itr; cibil returns {} ---
+        # from_date=2025-01&to_date=2025-12 -> Jan 2025 through the last day of Dec 2025
+        mod_from_date = request.query_params.get(f"{module_key}_from_date", from_date)
+        mod_to_date = request.query_params.get(f"{module_key}_to_date", to_date)
+        parsed_from = parse_date(mod_from_date)
+        parsed_to = parse_date(mod_to_date, is_end=True)
+        query.update(build_period_match(config, parsed_from, parsed_to))
+
+        # --- projection ---
+        projection = {field: 1 for field in config["fields"]}
+        if module_key == "cibil":
+            del projection["score"]
+            projection["cibil_report.EquifaxRetail.BureauAnalysis.score"] = 1
+        elif module_key == "bsa":
+            projection["account_details.Account Number"] = 1
+            projection["account_details.Account Type"] = 1
+        elif module_key == "itr":
+            if "from_year" in projection:
+                del projection["from_year"]
+            if "to_year" in projection:
+                del projection["to_year"]
+            projection["report.General Information.General Information"] = 1
+        projection["_id"] = 0
+
+        documents = await collection.find(query, projection).to_list(length=None)
+
+        # --- resolve account_ids ---
+        user_ids = list({doc.get("user_id") for doc in documents if doc.get("user_id")})
+        valid_object_ids = []
+        for uid in user_ids:
+            try:
+                valid_object_ids.append(ObjectId(uid))
+            except InvalidId:
+                pass
+
+        user_account_map = {}
+        if valid_object_ids:
+            users = (
+                await db["users"]
+                .find({"_id": {"$in": valid_object_ids}}, {"account_id": 1})
+                .to_list(length=None)
+            )
+            user_account_map = {str(u["_id"]): u.get("account_id") for u in users}
+
+        module_response_data = []
+        for doc in documents:
+            user_id = doc.get("user_id")
+            formatted_doc = {"account_id": user_account_map.get(user_id)}
+            for field in config["fields"]:
+                if module_key == "cibil" and field == "score":
+                    formatted_doc["score"] = (
+                        doc.get("cibil_report", {})
+                        .get("EquifaxRetail", {})
+                        .get("BureauAnalysis", {})
+                        .get("score")
+                    )
+                elif module_key == "gst" and field == "webhook_received_time":
+                    formatted_doc["created_at"] = doc.get("webhook_received_time")
+                elif module_key == "itr" and field in ["from_year", "to_year"]:
+                    pass
+                else:
+                    formatted_doc[field] = doc.get(field)
+
+            if module_key == "bsa":
+                account_details = doc.get("account_details", {})
+                formatted_doc["account_number"] = account_details.get("Account Number")
+                formatted_doc["account_type"] = account_details.get("Account Type")
+            elif module_key == "itr":
+                gen_info = doc.get("report", {}).get("General Information", {}).get("General Information", [])
+                if gen_info and isinstance(gen_info, list) and len(gen_info) > 0:
+                    first_year = gen_info[0].get("Year")
+                    if first_year is None:
+                        first_year = gen_info[0].get("year")
+                    formatted_doc["from_year"] = first_year
+                    
+                    if len(gen_info) > 1:
+                        second_year = gen_info[1].get("Year")
+                        if second_year is None:
+                            second_year = gen_info[1].get("year")
+                        formatted_doc["to_year"] = second_year
+                    else:
+                        formatted_doc["to_year"] = first_year
+
+            module_response_data.append(formatted_doc)
+            
+        if is_single_module:
+            response_data = module_response_data
+        else:
+            response_data[module_key] = module_response_data
 
     return {"message": "success", "data": response_data}
 
