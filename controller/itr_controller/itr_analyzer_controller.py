@@ -264,7 +264,7 @@ async def poll_email_link_status(database_conn) : #this function will run every 
                             # Network/timeout error — skip this link, retry next poll
                             continue
 
-                        status_update_dict =  construct_itr_status_update(response_json)
+                        status_update_dict = construct_itr_status_update(response_json)
                         bulk_update.append(
                             UpdateOne(
                                 {"_id": link["_id"]},
@@ -277,7 +277,7 @@ async def poll_email_link_status(database_conn) : #this function will run every 
             if bulk_update:
                 await itr_link_management.bulk_write(bulk_update)
 
-            await asyncio.sleep(30)
+            await asyncio.sleep(45)
 
 
         except httpx.HTTPError as e:
@@ -314,7 +314,7 @@ def construct_itr_status_update(response_json: dict):
         "RNP020":"PROCESSING"
     }
 
-    link_status = response_code_mapping.get(response_code,"FAILED")
+    link_status = response_code_mapping.get(response_code,"UNKNOWN_STATUS")
 
     update_doc = {
         "link_status": link_status,

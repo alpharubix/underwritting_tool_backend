@@ -1,3 +1,4 @@
+import dns
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncpg
 import dotenv
@@ -6,7 +7,7 @@ dotenv.load_dotenv(override=True)
 
 
 async def get_mongo_db():
-    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=10,minPoolSize=10)
+    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=200,minPoolSize=150)
     try:
         db = client["underwriting"]
         return db
@@ -14,7 +15,7 @@ async def get_mongo_db():
         raise e
 
 async def get_postgres_conn():
-    conn = await asyncpg.connect(os.getenv("POSTGRES_URI"))
+    conn = await asyncpg.create_pool(dsn=os.getenv("POSTGRES_URI"),max_size=2,min_size=2)
     try:
         return conn
     except Exception as e:

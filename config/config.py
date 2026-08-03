@@ -85,3 +85,14 @@ class CibilWebhookStatus(Enum):
 class SiteCode(enum.Enum):
     R1X01 = "R1X01"
     PCX01 = "PCX01"
+
+
+
+class TicketStatus(enum.Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+
+class TicketErrorClassification(enum.Enum):
+    USER_INPUT_ERROR = "USER_INPUT_ERROR"
+    BUG = "BUG"
+    EXTERNAL_ERROR = "EXTERNAL_ERROR"

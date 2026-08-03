@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 
 from controller.bsa_uploads import UploadHashMap
+from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
 from database.databse_config import get_mongo_db, get_postgres_conn
 from middleware.authorization_middleware import authorization
 from routes.accounts_filter_router import accounts_filter_router
@@ -18,6 +19,7 @@ from routes.cibil_router import cibil_router
 from routes.gst_router import gst_router
 from routes.itr_router import itr_router
 from routes.kyc_router import kyc_router
+from routes.ticktes_router import ticket_router
 from routes.user_route import user_router
 from routes.webhook_router import webhook_router
 
@@ -30,6 +32,7 @@ logging.basicConfig(
 logging.getLogger("motor").setLevel(logging.WARNING)
 logging.getLogger("pymongo").setLevel(logging.WARNING)
 
+
 logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def connect_to_databases(app: FastAPI): #database first approch
@@ -41,7 +44,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
         print('database connected successfully')
         upload_hashmap = UploadHashMap()
         asyncio.create_task(upload_hashmap.clean_expired_entries())
-        # asyncio.create_task(poll_email_link_status(app.state.mongo_db))
+        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
@@ -64,16 +67,14 @@ app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(accounts_filter_router)
 app.include_router(bsa_router)
-
 app.include_router(webhook_router)
-
 app.include_router(gst_router)
-
 app.include_router(itr_router)
 app.include_router(kyc_router)
 app.include_router(cibil_router)
-
 app.include_router(bank_scoring_router)
+app.include_router(ticket_router)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))

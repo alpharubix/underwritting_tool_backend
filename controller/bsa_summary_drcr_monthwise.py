@@ -736,6 +736,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
+                    "account_details":1,
                     "summary": {
                         "$filter": {
                             "input": {
@@ -845,6 +846,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
+                    "account_details":"$account_details",
                     "month": "$summary.month",
                     "parsedMonthDate": "$summary.parsedMonthDate",
                     "cash_deposit": {
@@ -946,6 +948,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
+                    "account_details":"$account_details",
                     "month": 1,
                     "parsedMonthDate": 1,
                     "mw_inflow_val": {
@@ -1017,6 +1020,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$group": {
                     "_id": "$user_id",
+                    "account_details": {"$first": "$account_details"},
                     "monthly_breakdown": {
                         "$push": {
                             "month": "$month",
@@ -1077,6 +1081,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "_id": 1,
+                    "account_details":"$account_details",
                     "monthly_breakdown": {
                         "$map": {
                             "input": "$monthly_breakdown",
