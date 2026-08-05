@@ -15,8 +15,11 @@ async def get_mongo_db():
         raise e
 
 async def get_postgres_conn():
-    conn = await asyncpg.create_pool(dsn=os.getenv("POSTGRES_URI"),max_size=250,min_size=200)
+    conn = await asyncpg.create_pool(dsn=os.getenv("POSTGRES_URI"),max_size=1,min_size=1)
     try:
         return conn
     except Exception as e:
+
+
+
         raise e

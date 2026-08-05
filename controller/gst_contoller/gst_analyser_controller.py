@@ -47,7 +47,7 @@ async def get_gstin(request: Request)->JSONResponse:
 
             gstin_list = [user["gst_number"]]
 
-            if user["secondary_gst_list"]:
+            if user.get("secondary_gst_list"):
                 gstin_list.extend(user["secondary_gst_list"])
 
             return JSONResponse(
