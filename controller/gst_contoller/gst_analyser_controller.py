@@ -647,7 +647,6 @@ async def get_all_user_ref_ids(request: Request,user_id:str)->JSONResponse:
             raise HTTPException(status_code=404, detail={"message": "No reference id found for this user"})
        #serialize response data
         for doc in docs:
-            doc['reference_id'] = doc['reference_id'][1:5]
             doc['gstin'] = doc['gstin'][0]
         return JSONResponse(status_code=200,content={"message":"Gst reference id list fetch success","data":docs})
 
