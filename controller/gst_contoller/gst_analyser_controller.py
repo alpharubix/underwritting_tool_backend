@@ -3,9 +3,11 @@ import logging
 import os
 import re
 import uuid
+import httpx
+import pymongo
+import pymongo.errors as pymongo_errors
 from datetime import datetime, timezone
 from json import JSONDecodeError
-import httpx
 from bson import ObjectId
 from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorCollection,AsyncIOMotorDatabase
@@ -22,26 +24,40 @@ logger = logging.getLogger(__name__)
 
 
 
+def _is_gstin_valid_for_new_registration(primary_gst,upcoming_gst):
+        primary_pan = primary_gst[3:12]
+        upcoming_pan = upcoming_gst[3:12]
+
+        if primary_pan != upcoming_pan:
+            return False
+        else:
+            return True
+
 async def get_gstin(request: Request)->JSONResponse:
     try:
         user_id = request.state.user_id
         user_coll : AsyncIOMotorCollection = request.app.state.mongo_db["users"]
 
-        user = await user_coll.find_one({"_id":ObjectId(user_id)},{"_id":1,"gst_number":1})
+        user = await user_coll.find_one({"_id":ObjectId(user_id)},{"_id":1,"gst_number":1,"secondary_gst_list":1})
 
         if not user:
             raise HTTPException(status_code=404, detail={"message":"user not found"})
 
         if user.get("gst_number"):
+
+            gstin_list = [user["gst_number"]]
+
+            if user.get("secondary_gst_list"):
+                gstin_list.extend(user["secondary_gst_list"])
+
             return JSONResponse(
                 status_code=200,
                 content={
                     "message": "GST number found",
-                    "gst_number": user["gst_number"],
+                    "gst_number": gstin_list,
                     "is_found": True
                 }
             )
-
         return JSONResponse(
                 status_code=200,
                 content={
@@ -63,6 +79,76 @@ async def get_gstin(request: Request)->JSONResponse:
                 "message": "Internal server error contact the administrator",
             }
         )
+
+
+async def add_new_gst(request):
+    try:
+        #step1-> validate the upcoming gstin number
+        body = await request.json()
+        if not body:
+            raise HTTPException(status_code=400, detail={"message": "Body cannot be empty"})
+
+        gstin :str= body.get("gstin")
+
+        if not gstin:
+            raise HTTPException(status_code=400, detail={"message": "GSTIN is required"})
+
+        gstin_pattern = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"
+        if not re.match(gstin_pattern, gstin.upper()):
+            raise HTTPException(status_code=400, detail={"message": "Invalid GSTIN format"})
+
+        #step2-> Get the primary gst number of this user
+
+        user_collection = request.app.state.mongo_db["users"]
+
+        user_id = request.state.user_id
+
+        primary_gst_info = await user_collection.find_one({"_id": ObjectId(user_id)},{"_id":0,"gst_number":1,"secondary_gst_list":1})
+
+        primary_gst = primary_gst_info["gst_number"]
+
+        #edge case covering
+        if primary_gst==gstin.strip():
+            raise HTTPException(status_code=400, detail={"message": "GSTIN already Added"})
+
+        if _is_gstin_valid_for_new_registration(primary_gst,gstin):
+
+            #add this new gst to the users db as secondary gst numbers
+            existing_secondary_gst = primary_gst_info.get("secondary_gst_list")
+
+            if existing_secondary_gst:
+                #update the existing_gst list with the new gst
+                result = await user_collection.update_one( {"_id": ObjectId(user_id)},{"$addToSet": {"secondary_gst_list": gstin}}) #edge case covering
+                if result.modified_count == 0:
+                    raise HTTPException(
+                        status_code=400,
+                        detail={"message": "GSTIN already Added to GST list"})
+
+            else:
+                # Create the secondary_gst list with the first GSTIN
+                await user_collection.update_one(
+                    {"_id": ObjectId(user_id)},
+                    {
+                        "$set": {
+                            "secondary_gst_list": [gstin]
+                        }
+                    }
+                )
+
+
+            return JSONResponse(
+                status_code=200,
+                content={"message": "GSTIN Added Successfully", "data": {"gstin": gstin.upper()},"is_completed":True})
+        else:
+            raise HTTPException(status_code=400, detail={"message": "Pan number miss match found"})
+    except JSONDecodeError :
+        raise HTTPException(status_code=400, detail={"message": "Invalid Json"})
+    except HTTPException as e:
+        print(e)
+        raise e
+    except Exception as e:
+        print(e)
+        raise  HTTPException(status_code=500, detail={"message": "Internal server error contact the administrator"})
 
 
 
@@ -119,99 +205,128 @@ async def update_gstin(request: Request)->JSONResponse:
 
 
 
-async def get_gstin_basic_info(request: Request)->JSONResponse:
+async def get_gstin_basic_info(request: Request) -> JSONResponse:
     try:
         user_id = request.state.user_id
-        gstin_info_coll : AsyncIOMotorCollection = request.app.state.mongo_db["gstin_basic_info"]
+        gstin_info_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gstin_basic_info"]
 
         try:
             body = await request.json()
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "Invalid JSON format in request body"},
+            )
 
         if not body:
-            raise HTTPException(status_code=400, detail={"message": "Body cannot be empty"})
-
-        gstin = body.get("gstin")
-
-        if not gstin:
-            raise HTTPException(status_code=400, detail={"message": "GSTIN is required"})
-
-        gst_info = await gstin_info_coll.find_one({"gstin":gstin.upper()})
-
-        if not gst_info:
-
-            scorme_gst_info_url = config.SCOREME_GST_INFO_URL
-
-            async with AsyncClient() as client:
-                try:
-                    response = await client.post(
-                        scorme_gst_info_url,
-                        headers={
-                            "clientId": os.getenv("CLIENT_ID"), # Matches your .env
-                            "clientSecret": os.getenv("CLIENT_SECRET") # Matches your .env
-                        },
-                        json={"gstin":[gstin.upper()]},
-                        timeout=60.0
-                    )
-                    scoreme_response_json = response.json()
-                except HTTPError as e:
-                    raise e
-
-            print(scoreme_response_json)
-            raise_gst_basic_info_expectation(scoreme_response_json)
-
-            await gstin_info_coll.insert_one({"user_id":user_id,**scoreme_response_json.get("data")})
-
-            gst_data = scoreme_response_json.get("data", {})
-
-            response_dict = {
-                "gstin": gst_data.get("gstin"),
-                "legalNameOfBusiness": gst_data.get("legalNameOfBusiness"),
-                "tradeName": gst_data.get("tradeName"),
-                "gstinStatus": gst_data.get("gstinStatus"),
-                "taxpayerType": gst_data.get("taxpayerType"),
-                "constitutionOfBusiness": gst_data.get("constitutionOfBusiness"),
-                "natureOfBusiness": gst_data.get("natureOfBusiness"),
-                "dateOfRegistration": gst_data.get("dateOfRegistration")
-            }
-
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "message": "GST information fetched successfully",
-                    "data": response_dict
-                }
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "Body cannot be empty"},
             )
-        
-        else:
 
-            response_dict = {
-                "gstin": gst_info.get("gstin"),
-                "legalNameOfBusiness": gst_info.get("legalNameOfBusiness"),
-                "tradeName": gst_info.get("tradeName"),
-                "gstinStatus": gst_info.get("gstinStatus"),
-                "taxpayerType": gst_info.get("taxpayerType"),
-                "constitutionOfBusiness": gst_info.get("constitutionOfBusiness"),
-                "natureOfBusiness": gst_info.get("natureOfBusiness"),
-                "dateOfRegistration": gst_info.get("dateOfRegistration")
-            }
-        
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "message": "GST information fetched successfully",
-                    "data": response_dict
-                }
+        gst_list = body.get("gstin")
+
+        if not gst_list:
+            raise HTTPException(
+                status_code=400,
+                detail={"message": "GSTIN list is required"},
             )
+
+        gst_list = [gst.strip().upper() for gst in gst_list]
+
+        response_data = []
+        missing_gstins = []
+
+        # Check which GSTINs are already present
+        for gstin in gst_list:
+            gst_info = await gstin_info_coll.find_one({"gstin": gstin})
+
+            if gst_info:
+                response_data.append(
+                    {
+                        "gstin": gst_info.get("gstin"),
+                        "legalNameOfBusiness": gst_info.get("legalNameOfBusiness"),
+                        "tradeName": gst_info.get("tradeName"),
+                        "gstinStatus": gst_info.get("gstinStatus"),
+                        "taxpayerType": gst_info.get("taxpayerType"),
+                        "constitutionOfBusiness": gst_info.get(
+                            "constitutionOfBusiness"
+                        ),
+                        "natureOfBusiness": gst_info.get("natureOfBusiness"),
+                        "dateOfRegistration": gst_info.get("dateOfRegistration"),
+                    }
+                )
+            else:
+                missing_gstins.append(gstin)
+
+        # Fetch missing GSTINs from ScoreMe
+        if missing_gstins:
+            for gstin in missing_gstins:
+                async with AsyncClient() as client:
+                    try:
+                        response = await client.post(
+                            config.SCOREME_GST_INFO_URL,
+                            headers={
+                                "clientId": os.getenv("CLIENT_ID"),
+                                "clientSecret": os.getenv("CLIENT_SECRET"),
+                            },
+                            json={"gstin": gstin},
+                            timeout=60.0,
+                        )
+
+                        scoreme_response_json = response.json()
+
+                    except HTTPError as e:
+                        raise e
+
+                raise_gst_basic_info_expectation(scoreme_response_json)
+
+                gst_data = scoreme_response_json.get("data", [])
+
+                gst_data["user_id"] = user_id
+
+
+                await gstin_info_coll.insert_one(gst_data)
+
+                response_data.append(
+                    {
+                        "gstin": gst_data.get("gstin"),
+                        "legalNameOfBusiness": gst_data.get("legalNameOfBusiness"),
+                        "tradeName": gst_data.get("tradeName"),
+                        "gstinStatus": gst_data.get("gstinStatus"),
+                        "taxpayerType": gst_data.get("taxpayerType"),
+                        "constitutionOfBusiness": gst_data.get(
+                            "constitutionOfBusiness"
+                        ),
+                        "natureOfBusiness": gst_data.get("natureOfBusiness"),
+                        "dateOfRegistration": gst_data.get("dateOfRegistration"),
+                    }
+                )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "GST information fetched successfully",
+                "data": response_data,
+            },
+        )
+
     except HTTPException as e:
         raise e
+
     except HTTPError as e:
         logger.error("Error raised at get_gstin_basic_info controller", str(e))
-        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+        raise HTTPException(
+            status_code=500,
+            detail={"message": "Internal server error"},
+        )
+
     except Exception as e:
-        logger.error("Error raised at get_gstin_info controller",str(e))
-        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+        logger.error("Error raised at get_gstin_basic_info controller", str(e))
+        raise HTTPException(
+            status_code=500,
+            detail={"message": "Internal server error"},
+        )
 
 
 
@@ -526,11 +641,14 @@ async def get_all_user_ref_ids(request: Request,user_id:str)->JSONResponse:
 
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
 
-        docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1}).to_list(None)
+        docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
 
         if not docs:
             raise HTTPException(status_code=404, detail={"message": "No reference id found for this user"})
-
+       #serialize response data
+        for doc in docs:
+            doc['reference_id'] = doc['reference_id'][1:5]
+            doc['gstin'] = doc['gstin'][0]
         return JSONResponse(status_code=200,content={"message":"Gst reference id list fetch success","data":docs})
 
     except HTTPException as e:

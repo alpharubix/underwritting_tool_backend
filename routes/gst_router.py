@@ -3,7 +3,7 @@ from starlette.requests import Request
 from controller.gst_contoller.gst_analyser_controller import get_gstin, update_gstin, get_gstin_basic_info, get_gst_otp, \
     validate_gst_otp_info, send_gstin_to_score_me, gst_ref_id_status, get_all_user_ref_ids, \
     get_overview_and_account_details, get_top_suppliers_and_customers,get_monthly_sales_and_purchase_summary, \
-    get_r1xcrm_gst_ref_id_status, get_r1xcrm_overview, get_r1xcrm_top_suppliers_and_customers, get_r1xcrm_monthly_sales_purchase_summary
+    get_r1xcrm_gst_ref_id_status, get_r1xcrm_overview, get_r1xcrm_top_suppliers_and_customers, get_r1xcrm_monthly_sales_purchase_summary,add_new_gst
 
 gst_router = APIRouter(prefix="/v1/gst", tags=["gst"])
 
@@ -22,6 +22,14 @@ async def gstin(request: Request):
        return await update_gstin(request)
     except HTTPException as e:
         raise e
+
+@gst_router.post("/gstin/add-new")
+async def gstin_add(request: Request):
+    try:
+        return await add_new_gst(request)
+    except HTTPException as e:
+        raise e
+
 
 @gst_router.post("/gstin-basic-info")
 async def gstin_basic_info(request: Request):
