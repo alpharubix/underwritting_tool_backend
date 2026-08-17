@@ -8,7 +8,6 @@ from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
-
 from config.config import SiteCode
 from utils.auth_utility import hash_password, get_auth_dict,verify_password, create_access_token,is_password_valid
 from utils.user_utility import get_user_dict
@@ -18,6 +17,18 @@ dotenv.load_dotenv()
 import os
 from datetime import datetime, timezone
 import uuid
+from starlette.requests import Request
+from passlib.context import CryptContext
+from pwdlib import PasswordHash
+from pymongo.errors import DuplicateKeyError
+from config.config import AdminStatus,AdminRole
+import secrets 
+import string
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
+
 
 async def register_user(
     input_data: dict,
@@ -112,7 +123,6 @@ async def register_user(
         print("Error while creating user 5pointcreditsupport:", str(e))
         raise HTTPException(status_code=500, detail="Error while creating user contact 5pointcreditsupport")
 
-
 async def user_login(mongodb_connection, input_data: dict):
     try:
         email_id = input_data.get("email_id")
@@ -175,7 +185,6 @@ async def user_login(mongodb_connection, input_data: dict):
             detail="Internal server error contact admin for support"
         )
 
-
 async def user_logout():
     response = JSONResponse(status_code=status.HTTP_200_OK, content={"message":"Logout successful"})
     response.delete_cookie(
@@ -186,8 +195,6 @@ async def user_logout():
         samesite="none"  # or "lax" depending on your setup
     )
     return response
-
-
 
 async def user_reset_password(current_user, mongodb_connection, input_data: dict):
     try:
@@ -236,7 +243,6 @@ async def user_reset_password(current_user, mongodb_connection, input_data: dict
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="please contact admin for support"
         )
-
 
 async def forget_password(email_id, mongodb_connection,background_task):
         #step 1:check if user exist in our system  if doesn't exist send response user not found create a new user or if you forget your username pls contact admin for support
@@ -420,7 +426,6 @@ async def reset_password_(reset_token: str, new_password: str, mongodb_connectio
             detail={"message": "Internal server error please contact admin"}
         )
 
-
 async def check_r1xchange_account_controller(acc_id:str,request):
     
     mongodb_connection = request.app.state.mongo_db
@@ -452,3 +457,174 @@ async def check_r1xchange_account_controller(acc_id:str,request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error please contact admin for support"
         )
+
+
+"""--------PRATHAMESH-----admin portfolio codes"""
+async def create_admin(request: Request):
+
+    try:
+        db = request.app.state.mongo_db
+        mongo_client = db.client
+        body = await request.json()
+        password = body.get("password")
+
+        requester_role = request.state.role
+        print("Requester role : ",requester_role)
+        # print(role)
+        if requester_role!= AdminRole.SUPER_ADMIN.value:
+            return JSONResponse(
+                content={"message":"Only super admins can create the admins"},
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        
+        if not password:
+            return JSONResponse(
+                content={"message": "Password is required"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Generate 6-digit login ID
+        # login_id = secrets.randbelow(900000) + 100000
+        # login_id = db.admin.find_one({"login_id":login_id})
+
+        # Password hashing does not need a DB transaction
+        password_hash = hash_password(password)
+        now = datetime.now(timezone.utc)
+        letters = ''.join(
+            secrets.choice(string.ascii_uppercase)
+            for _ in range(4)
+        )
+        digits = ''.join(
+            secrets.choice(string.digits)
+            for _ in range(2)
+        )
+        
+        login_id=letters+digits
+        role = AdminRole.ADMIN.value
+        admin_doc = {
+            "login_id": login_id,
+            "admin_status": AdminStatus.ACTIVE.value,
+            "role": (
+                AdminRole.SUPER_ADMIN.value
+                if role == AdminRole.SUPER_ADMIN.value
+                else AdminRole.ADMIN.value
+            ),
+            "created_at": now,
+            "updated_at": now
+        }
+
+        auth_doc = {
+            "user_id": login_id,
+            "password_hash": password_hash,
+            "password_changed_at": now
+        }
+
+        async with await mongo_client.start_session() as session:
+            async with session.start_transaction():
+                # Create admin
+                admin_result = await db.admin.insert_one(
+                    admin_doc,
+                    session=session
+                )
+
+                # Create authentication record
+                auth_result = await db.auth.insert_one(
+                    auth_doc,
+                    session=session
+                )
+        return JSONResponse(
+            content={
+                "message": f"{admin_doc.get("role")} created successfully",
+                "data": {
+                    "login_id": login_id,
+                    "admin_id": str(admin_result.inserted_id),
+                    "auth_id": str(auth_result.inserted_id)
+                }
+            },
+            status_code=status.HTTP_201_CREATED
+        )
+
+    except DuplicateKeyError as e:
+
+        print("Duplicate key while creating admin:", e)
+
+        return JSONResponse(
+            content={
+                "message": "Admin creation failed because the generated login ID already exists"
+            },
+            status_code=status.HTTP_409_CONFLICT
+        )
+
+    except Exception as e:
+
+        print("Error while creating admin:", e)
+
+        return JSONResponse(
+            content={
+                "message": "Failed to create admin"
+            },
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+async def login_admin(request:Request):
+
+    try:
+        db = request.app.state.mongo_db 
+        body = await request.json()
+        login_id = body.get("login_id")
+        incoming_password = body.get("password")
+
+        
+        admin = await db.admin.find_one({
+                "login_id":login_id
+            })
+
+        if admin is None:
+            return JSONResponse(
+                content={"message":"User doesnt exist"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        else:
+            admin_role = admin.get("role")
+            auth_doc= await db.auth.find_one({
+                "user_id":login_id
+            })
+
+            stored_password = auth_doc.get("password_hash")
+            if not verify_password(incoming_password,stored_password):
+                return JSONResponse(
+                    content={"message":"Password is incorrect"},
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            token = create_access_token({
+                        "user_id": str(admin["_id"]),
+                        "role": admin_role
+                    })
+            
+
+            response = JSONResponse(
+                        status_code=status.HTTP_200_OK,
+                        content={
+                            "status": True,
+                            "message": f"Login successful | role : {admin_role}"}
+                    )
+    
+            response.set_cookie(
+                        key="access_token",
+                        value=token,
+                        httponly=True,
+                        secure=False,
+                        samesite=None)
+            return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+            print("Error raised in login part:", str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error contact admin for support"
+            )

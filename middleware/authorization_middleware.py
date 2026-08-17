@@ -44,7 +44,10 @@ async def authorization(request: Request, call_next):
             r"^/v1/crm/accounts-filter/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
+            r"^/v1/auth/login-admin"
+            # r"^/v1/auth/create-super-admin",
         ]
+
 
         # Check if the current path matches any of our regex patterns
         is_public = any(re.match(pattern, request.url.path) for pattern in public_patterns)

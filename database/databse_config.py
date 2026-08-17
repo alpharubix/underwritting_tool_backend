@@ -7,7 +7,7 @@ dotenv.load_dotenv(override=True)
 
 
 async def get_mongo_db():
-    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=200,minPoolSize=150)
+    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=10,minPoolSize=1)
     try:
         db = client["underwriting"]
         return db

@@ -96,3 +96,11 @@ class TicketErrorClassification(enum.Enum):
     USER_INPUT_ERROR = "USER_INPUT_ERROR"
     BUG = "BUG"
     EXTERNAL_ERROR = "EXTERNAL_ERROR"
+
+class AdminStatus(enum.Enum):
+    ACTIVE = "ACTIVE"
+    IN_ACTIVE = "INACTIVE"
+
+class AdminRole(enum.Enum):
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"

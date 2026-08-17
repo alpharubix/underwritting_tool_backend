@@ -1,11 +1,13 @@
 from fastapi import HTTPException, BackgroundTasks
 from fastapi.routing import APIRouter
 from starlette.requests import Request
+from starlette import status as status
+from starlette.responses import JSONResponse
 from json.decoder import JSONDecodeError
 from utils.auth_utility import is_password_valid
 auth_router = APIRouter(prefix="/v1/auth")
-from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller
-
+from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin
+from datetime import date,datetime,timezone
 
 @auth_router.post("/register")
 async def register(request: Request,background_tasks: BackgroundTasks):
@@ -90,6 +92,7 @@ async def validate_otp (request: Request):
         raise HTTPException(status_code=400, detail="Invalid request body")
     except HTTPException as e:
         raise e
+    
 @auth_router.post("/reset_password")
 async def reset_password(request: Request):
     try:
@@ -115,3 +118,13 @@ async def check_r1xchange_account(request: Request,acc_id:int):
         raise HTTPException(status_code=400, detail="Invalid request body")
     except HTTPException as e:
         raise e
+
+
+"""--------------------------------------------------------------------------"""
+@auth_router.post("/create-admin")
+async def create_admin_route(request:Request):
+    return await create_admin(request)
+
+@auth_router.post('/login-admin')
+async def login_admin_route(request:Request):
+    return await login_admin(request)
