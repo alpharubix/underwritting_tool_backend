@@ -1,7 +1,5 @@
 import json
 import random
-from asyncio import start_server
-from datetime import datetime, timezone, timedelta
 import asyncpg
 from bson import ObjectId
 from fastapi import HTTPException, BackgroundTasks
@@ -9,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
 from config.config import SiteCode
-from utils.auth_utility import hash_password, get_auth_dict,verify_password, create_access_token,is_password_valid
+from utils.auth_utility import hash_password, get_auth_dict,verify_password,create_access_token,is_password_valid,generate_unique_id
 from utils.user_utility import get_user_dict
 from controller.backgroud_task_controller import send_reset_email_to_user
 import dotenv
@@ -18,16 +16,10 @@ import os
 from datetime import datetime, timezone
 import uuid
 from starlette.requests import Request
-from passlib.context import CryptContext
-from pwdlib import PasswordHash
 from pymongo.errors import DuplicateKeyError
 from config.config import AdminStatus,AdminRole
 import secrets 
 import string
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
 
 
 async def register_user(
@@ -575,8 +567,8 @@ async def login_admin(request:Request):
         login_id = body.get("login_id")
         incoming_password = body.get("password")
 
-        
-        admin = await db.admin.find_one({
+        print("Login ID : ",login_id)
+        admin = await db["admins"].find_one({
                 "login_id":login_id
             })
 
@@ -628,3 +620,216 @@ async def login_admin(request:Request):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal server error contact admin for support"
             )
+
+
+async def create_anchor(request: Request):
+    try:
+        user_role = request.state.role
+
+        # Only ADMIN and SUPER_ADMIN can create an anchor
+        if user_role not in (
+            AdminRole.SUPER_ADMIN.value,
+            AdminRole.ADMIN.value
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"message": "Forbidden access"}
+            )
+
+        database = request.app.state.mongo_db
+
+        body = await request.json()
+
+        anchor_name = body.get("anchor_name")
+        anchor_code = body.get("anchor_code")
+        password = body.get("password")
+
+        if anchor_name is None:
+            return JSONResponse(
+                content={"message": "Anchor Name is required"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        if anchor_code is None:
+            return JSONResponse(
+                content={"message": "Anchor code is required"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        if password is None:
+            return JSONResponse(
+                content={"message": "Password is required"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate password
+        is_password_validation, message = is_password_valid(password)
+
+        if not is_password_validation:
+            return JSONResponse(
+                content={"message": message},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check whether anchor code already exists
+        existing_anchor = await database["anchors"].find_one(
+            {"anchor_code": anchor_code}
+        )
+
+        if existing_anchor:
+            return JSONResponse(
+                content={"message": "Anchor code already exists"},
+                status_code=status.HTTP_409_CONFLICT
+            )
+
+        # Generate unique login ID
+        login_id = generate_unique_id()[:5]
+
+        # Hash password
+        hashed_password = hash_password(password)
+
+        current_time = datetime.now(timezone.utc)
+
+        anchor_doc = {
+            "anchor_name": anchor_name,
+            "anchor_code": anchor_code,
+            "login_id": login_id,
+            "is_active": True,
+
+             #meta fields for auditing
+            "created_at": current_time,
+            "modified_at": current_time,
+
+            # User who created the anchor
+            "created_by": ObjectId(request.state.user_id),
+            "modified_by": ObjectId(request.state.user_id)
+        }
+
+        result = await database["anchors"].insert_one(anchor_doc)
+
+        if result:
+            anchor_id = result.inserted_id
+            auth_doc = {
+                "user_id": str(anchor_id),
+                "password_hash": hashed_password,
+                "password_changed_at":None
+            }
+            result = await database["auth"].insert_one(auth_doc)
+
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "message": "Anchor created successfully",
+                "data":{"login_id":login_id}
+            }
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "message": "Failed to create anchor",
+                "error": str(e)
+            }
+        )
+
+async def anchor_login(request: Request):
+    try:
+        body = await request.json()
+
+        login_id = body.get("login_id")
+        password = body.get("password")
+
+        if login_id is None or login_id == '':
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,content={"message": "login id is required"}
+            )
+
+        if password is None or password == '' :
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message": "password is required"})
+
+        database = request.app.state.mongo_db
+
+        user = await database["anchors"].find_one({"login_id": login_id})
+
+        if not user:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"message":"User not found please register"}
+            )
+        auth_doc = await database["auth"].find_one({"user_id": str(user["_id"])})
+
+        hashed_password = auth_doc["password_hash"]
+
+        if not verify_password(password,hashed_password):
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"message":"Invalid credentials"}
+            )
+
+        token = create_access_token({
+            "user_id": str(user["_id"]),
+            "role": user.get("role", "ANCHOR")
+        })
+
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "status": True,
+                "message": "Login successful"}
+        )
+
+        response.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=True,
+            secure=True,
+            samesite="None", )
+
+        return response
+
+    except Exception as e:
+        print(e)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"message": "Internal server error contact admin for support"},
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

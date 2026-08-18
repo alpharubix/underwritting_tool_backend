@@ -89,3 +89,7 @@ def is_email_valid(email: str):
         return False
 
     return True
+
+
+def generate_unique_id() -> str:
+    return str(uuid.uuid4())
