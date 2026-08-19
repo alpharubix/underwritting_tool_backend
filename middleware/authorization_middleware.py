@@ -44,8 +44,10 @@ async def authorization(request: Request, call_next):
             r"^/v1/crm/accounts-filter/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
-            r"^/v1/auth/login-admin"
-            # r"^/v1/auth/create-super-admin",
+            r"^/v1/auth/login-admin",
+            r"^/v1/auth/create-super-anchor",
+            r"^/v1/auth/create-super-admin",
+            # r"^/v1/auth/create-admin",
         ]
 
 

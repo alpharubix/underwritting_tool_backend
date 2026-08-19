@@ -1,4 +1,4 @@
-from fastapi import HTTPException, BackgroundTasks
+from fastapi import HTTPException, BackgroundTasks,Header
 from fastapi.routing import APIRouter
 from starlette.requests import Request
 from json.decoder import JSONDecodeError
@@ -6,6 +6,8 @@ from utils.auth_utility import is_password_valid
 from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,create_anchor,anchor_login
 
 auth_router = APIRouter(prefix="/v1/auth")
+from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,dashboard_admins,update_admin,create_super_admin,create_super_anchor
+from datetime import date,datetime,timezone
 
 @auth_router.post("/register")
 async def register(request: Request,background_tasks: BackgroundTasks):
@@ -134,3 +136,22 @@ async def create_anchor_route(request:Request):
 @auth_router.post('/anchor/login')
 async def login_anchor_route(request:Request):
     return await anchor_login(request)
+
+
+#dashboard - super-admins and admins
+@auth_router.get("/dashboard-admins")
+async def dashboard_route(request:Request):
+    return await dashboard_admins(request)
+
+@auth_router.patch("/update-admin/{login_id}") # THIS ROUTE CAN HANDLE SINGLE UPDATE
+async def update_admin_route(request:Request,login_id:str):
+    return await update_admin(request,login_id)
+
+
+@auth_router.post("/create-super-admin")
+async def create_super_admin_route(request:Request,super_admin_key:str=Header(...)):
+    return await create_super_admin(request,super_admin_key)
+
+@auth_router.post("/create-super-anchor")
+async def create_super_anchor_route(request:Request,super_anchor_key:str=Header(...)):
+    return await create_super_anchor(request,super_anchor_key)

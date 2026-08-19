@@ -1,5 +1,7 @@
 import json
 import random
+from asyncio import start_server
+from datetime import datetime, timezone, timedelta
 import asyncpg
 from bson import ObjectId
 from fastapi import HTTPException, BackgroundTasks
@@ -20,6 +22,10 @@ from pymongo.errors import DuplicateKeyError
 from config.config import AdminStatus,AdminRole
 import secrets 
 import string
+pwd_context = CryptContext(
+    schemes=["bcrypt"],
+    deprecated="auto"
+)
 
 
 async def register_user(
@@ -514,11 +520,15 @@ async def create_admin(request: Request):
         async with await mongo_client.start_session() as session:
             async with session.start_transaction():
                 # Create admin
-                admin_result = await db.admin.insert_one(
+                admin_result = await db.admins.insert_one(
                     admin_doc,
                     session=session
                 )
-
+                auth_doc = {
+                            "user_id": str(admin_result.inserted_id),
+                            "password_hash": password_hash,
+                            "password_changed_at": now
+                        }
                 # Create authentication record
                 auth_result = await db.auth.insert_one(
                     auth_doc,
@@ -567,10 +577,9 @@ async def login_admin(request:Request):
         login_id = body.get("login_id")
         incoming_password = body.get("password")
 
-        print("Login ID : ",login_id)
-        admin = await db["admins"].find_one({
-                "login_id":login_id
-            })
+        admin = await db.admins.find_one(
+            {"login_id":login_id}
+        )
 
         if admin is None:
             return JSONResponse(
@@ -579,9 +588,10 @@ async def login_admin(request:Request):
             )
 
         else:
+            user_id = str(admin["_id"])
             admin_role = admin.get("role")
             auth_doc= await db.auth.find_one({
-                "user_id":login_id
+                "user_id":user_id
             })
 
             stored_password = auth_doc.get("password_hash")
@@ -592,7 +602,7 @@ async def login_admin(request:Request):
                 )
 
             token = create_access_token({
-                        "user_id": str(admin["_id"]),
+                        "user_id": user_id,
                         "role": admin_role
                     })
             
@@ -795,41 +805,208 @@ async def anchor_login(request: Request):
             content={"message": "Internal server error contact admin for support"},
         )
 
+async def dashboard_admins(request:Request):
+    db = request.app.state.mongo_db
+    requester_role = request.state.role
+    print("Requester Role : ",requester_role)
+
+    ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN"}
+    if requester_role not in ALLOWED_ROLES:
+        return JSONResponse(
+            content={"message":"Forbidden access !"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+
+    users =  await db.users.find({},{"_id":0}).to_list(length=None)
+    anchors = await db.anchors.find({},{"_id":0,"created_by":0,"modified_by":0}).to_list(length=None)
+
+    if requester_role == "SUPER_ADMIN":
+        #view ADMINS info
+        admins = await db.admins.find({"role":"ADMIN"},{"_id":0}).to_list(length=None)
+        data = {"role":requester_role,"admins":admins,"anchors":anchors}
+
+        return data
+
+    else:
+        #view USERS info, he is admin
+        data={"role":"admin","users":users}
+        return data
+
+#STARTED THE MODIFICATION
+async def update_admin(request:Request,incoming_login_id:str):
+    #ONLY SUPER ADMIN PREVILEGE
+    requested_role = request.state.role
+
+    body = await request.json()
+    keys = body.keys() #ATTRIBUTE checking
+
+    if not incoming_login_id:
+        return JSONResponse(
+            content={"message": "Please provide the login ID"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    if requested_role!="SUPER_ADMIN":
+        return JSONResponse(
+            content={"message":"Forbidden access !"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+
+    ALLOWED_ATTR = {"admin_status","role","login_id"}
+    CLOSEST_ATTR = {}
+
+    db = request.app.state.mongo_db
+
+    invalid_keys = set(keys) - ALLOWED_ATTR
+
+    if invalid_keys:
+        CLOSEST_ATTR = {
+            key: actual
+            for key in invalid_keys
+            for actual in ALLOWED_ATTR
+            if actual in key or key in actual
+        }
+        return JSONResponse(
+            content={"message":f"Invalid keys found : {list(invalid_keys)}","Closest keys":CLOSEST_ATTR},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    now = datetime.now(timezone.utc)
+
+    target_admin = await db.admins.find_one({
+        "login_id":incoming_login_id
+
+    })
+
+    if not target_admin :
+        return JSONResponse(
+            content={"message":"Admin not found | Please recheck the login-id"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    old_data = {
+        key:target_admin.get(key)
+        for key in keys
+    }
+    redundant_data = {
+        key:value
+        for key,value in body.items()
+        if old_data.get(key) == value
+    }
+
+    update_data = {
+        key: value
+        for key, value in body.items()
+        if key not in redundant_data
+    }
+    update_data["updated_at"]=now.isoformat()
+    print("Redundant data : ",redundant_data)
+    print("Update data : ",update_data)
+    admin_result = await db.admins.update_one(
+        {"_id": target_admin["_id"]},
+        {"$set":update_data}
+    )
+
+    if admin_result.matched_count==0:
+        return JSONResponse(
+            content={"message":"Failed to update - "},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    final_updated_data = {
+        "login_id":incoming_login_id,
+        f"old data":old_data,
+        f"updated data":update_data
+    }
+    print(admin_result)
+
+    return JSONResponse(
+        content={"message":f"Admin with the login-id : {incoming_login_id} has been updated successfully",**final_updated_data},
+        status_code=status.HTTP_200_OK
+    )
+
+
+async def create_super_admin(request:Request,incoming_super_key:str):
+    super_admin_key = os.getenv("SUPER_ADMIN_KEY")
+
+    if incoming_super_key!=super_admin_key:
+        return JSONResponse(
+            content={"message":"Please provide the valid super admin key"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    #create
+    db = request.app.state.mongo_db
+    body = await request.json()
+
+    letters = ''.join(
+                secrets.choice(string.ascii_uppercase)
+                for _ in range(4)
+            )
+    digits = ''.join(
+        secrets.choice(string.digits)
+        for _ in range(2)
+    )
+
+    login_id = letters+digits
+    password = body.get("password")
+    hashed_password = hash_password(password)
+    admin_result = await db.admins.insert_one({
+        "login_id":login_id,
+        "password":hashed_password,
+        "role":AdminRole.SUPER_ADMIN.value
+    })
+    if admin_result.inserted_id is None:
+        return JSONResponse(
+            content={"message":"Error while creating the super-admin"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    return JSONResponse(
+        content={"message":"Super admin credentials created | Please remember the password given","login_id":login_id,"password":hashed_password},
+        status_code=status.HTTP_201_CREATED
+    )
 
 
 
+async def create_super_anchor(request:Request,incoming_super_key:str):
+    super_anchor_key = os.getenv("SUPER_ANCHOR_KEY")
 
+    if incoming_super_key!=super_anchor_key:
+        return JSONResponse(
+            content={"message":"Please provide the valid super anchor key"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
 
+    #create
+    db = request.app.state.mongo_db
+    body = await request.json()
 
+    letters = ''.join(
+                secrets.choice(string.ascii_uppercase)
+                for _ in range(4)
+            )
+    digits = ''.join(
+        secrets.choice(string.digits)
+        for _ in range(2)
+    )
 
+    login_id = letters+digits
+    password = body.get("password")
+    hashed_password = hash_password(password)
+    anchor_result = await db.anchors.insert_one({
+        "login_id":login_id,
+        "password":hashed_password,
+        "role":"SUPER_ANCHOR"
+    })
 
+    if anchor_result.inserted_id is None:
+        return JSONResponse(
+            content={"message":"Error while creating the super-admin"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    return JSONResponse(
+        content={"message":"Super anchor credentials created | Please remember the password given","login_id":login_id,"password":password},
+        status_code=status.HTTP_201_CREATED
+    )
 
