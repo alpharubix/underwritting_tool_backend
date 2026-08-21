@@ -1,4 +1,5 @@
 import math
+from typing import Any
 
 from fastapi import Header,Request,status
 from bson import ObjectId
@@ -6,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from datetime import datetime, timedelta,timezone
 
+from config import config
 
 """ DOCUMENTATION - 
 admins should see - 
@@ -233,6 +235,7 @@ async def get_users(request: Request,page:int):
         "account_id": int,
         "customer_name": str,
         "company_name": str,
+        "email_id":str,
         "phone": str,
         "gst_number": str,
         "status": str,
@@ -303,36 +306,41 @@ async def get_users(request: Request,page:int):
             query[filter] = filter_val                  
     db = request.app.state.mongo_db
 
-    projection = {
-        "$project": {
-            "_id": 0,
-            "company_name": 1,
-            "customer_name": 1,
-            "gst_number": 1,
-            "account_id": 1,
-            "phone": 1,
-            "created_at": {"$toString": "$created_at"},
-            "updated_at": {"$toString": "$updated_at"},
-            "anchor_id": {"$toString": "$anchor_id"}
-        }
-    }
     skip = (page - 1) * limit
     users = await db.users.aggregate([
         {
             "$match": query
         },
-        projection,
         {
-            "$skip":skip
+            "$project": {
+                "is_deleted": 0
+            }
         },
         {
-            "$limit":limit
+            "$skip": skip
+        },
+        {
+            "$limit": limit
         }
     ]).to_list(length=limit)
 
     total_users = await db.users.count_documents({})
 
     total_pages=math.ceil(total_users / limit)
+
+
+    for user in users:
+        user["_id"] = str(user["_id"])
+
+        if "anchor_id" in user:
+            user["anchor_id"] = str(user["anchor_id"])
+
+        if "created_at" in user:
+            user["created_at"] = user["created_at"].isoformat()
+
+        if "updated_at" in user:
+            user["updated_at"] = user["updated_at"].isoformat()
+
 
     response_status = True
     if page>total_pages or len(users)<1:
@@ -343,13 +351,12 @@ async def get_users(request: Request,page:int):
     return JSONResponse(
     content={
         "message": "Users fetched successfully" if response_status else "No users fetched",
-        "page": page,
+        "data": users,
+        "page_info":{"page": page,
         "limit": limit,
         "total_pages":total_pages,
-        "total_datatal": total_users,
-        "requester_role":requester_role,
-        "data": users
-    },
+        "total_data": total_users,
+    }},
     status_code=status.HTTP_200_OK
 )
 
@@ -359,7 +366,7 @@ async def get_admins_list(
 ):
     requested_role = request.state.role
     limit =10
-    if requested_role!="SUPER_ADMIN":
+    if requested_role!=config.AdminRole.SUPER_ADMIN.value:
         return JSONResponse(
             content={"message": "Forbidden access!"},
             status_code=status.HTTP_403_FORBIDDEN
@@ -384,15 +391,6 @@ async def get_admins_list(
 
     skip = (page - 1) * limit
 
-    total_admins = await db.admins.count_documents(query)
-    total_pages = total_admins//limit + 1
-
-    if page>total_pages:
-        print("none admins")
-        return JSONResponse(
-            content={"message":"No more records"},
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
     admins = await (
         db.admins
         .find(
@@ -405,43 +403,104 @@ async def get_admins_list(
         .limit(limit)
         .to_list(length=limit)
     )
-    
+    total_pages = math.ceil(len(admins) / limit)
     return {
         "data": admins,
         "pagination": {
             "page": page,
             "limit": limit,
-            "total": total_admins,
+            "total_records":  len(admins),
             "total_pages":total_pages
         }
     }
 
-async def get_anchors(request:Request,module:str,page:int):
-    ALLOWED_MODULES = {"SUPER_ANCHORS","ANCHORS"}
-    requester_role = request.state.role
-    
-    print(module)
-    if module not in ALLOWED_MODULES:
-        return JSONResponse(
-            content={"message":"Invalid search of moduleeee"},
-            status_code=status.HTTP_400_BAD_REQUEST
-        )
 
-    if requester_role not in ALLOWED_ROLES:
-        #if he is logged in as super-anchor, please use anchor routes (This is /admin) , 
-        #please redirect him to /anchor
-        JSONResponse(
-            content={"message":"Forbidden role"},
+async def get_anchors(request: Request,page:int=1):
+
+    limit=10
+    requester_role = request.state.role
+
+    if requester_role not in ('ADMIN','SUPER_ADMIN'):
+        return JSONResponse(
+            content={
+                "message": "Forbidden access !",
+                "role": requester_role
+            },
             status_code=status.HTTP_403_FORBIDDEN
         )
 
-    else:
-        db = request.app.state.mongo_db
-        module=module.lower()
-        print(module)
-        if module=="anchors":
-            anchor_docs = await db.anchors.find({"role":"ANCHOR"},{"_id":0,"created_at":0,"modified_at":0,"created_by":0,"modified_by":0}).to_list(length=None)
-            return anchor_docs
+    db = request.app.state.mongo_db
+
+    filters = dict(request.query_params)
+
+    query:dict[str, Any] = {
+        # "role": "ANCHOR"
+    }
+
+    ALLOWED_FILTERS = {
+        "anchor_name",
+        "anchor_code",
+        "login_id",
+        "is_active"
+    }
+
+    for filter_field, filter_value in filters.items():
+
+        if filter_field not in ALLOWED_FILTERS:
+            continue
+
+        if filter_field == "is_active":
+            query[filter_field] = filter_value.lower() == "true"
+
         else:
-            super_anchor_docs = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0,"created_at":0,"modified_at":0,"created_by":0,"modified_by":0}).to_list(length=None)
-            return super_anchor_docs
+            query[filter_field] = {
+                "$regex": f"^{filter_value}",
+                "$options": "i"
+            }
+
+    projection = {
+        "$project": {
+            "_id": 0,
+            "anchor_name": 1,
+            "anchor_code": 1,
+            "login_id": 1,
+            "is_active": 1,
+            "role": 1,
+            "created_at": {"$toString": "$created_at"},
+            "updated_at": {"$toString": "$updated_at"},
+            "created_by": {"$toString": "$created_by"},
+            "updated_by": {"$toString": "$updated_by"}
+        }
+    }
+
+
+    anchor_docs = await (
+        db.anchors
+        .aggregate([
+            {"$match": query},
+            projection
+        ])
+        .to_list(length=None)
+    )
+    print("Total number of docs",len(anchor_docs))
+    total_pages = math.ceil(len(anchor_docs) / limit)
+
+    response_status = True
+    if page>total_pages or len(anchor_docs)<1:
+        # print("Less than 1" if len(users)<1 or "0")
+        print("Condition hit")
+        response_status=False
+
+    return JSONResponse(
+        content={
+            "message": "Anchors fetched successfully" if response_status else "No anchors fetched",
+            "data": anchor_docs,
+            "page_info":{
+            "page":page,
+            "limit":limit,
+            "total_pages":total_pages,
+            "total_records":len(anchor_docs),
+           }
+        },
+        status_code=status.HTTP_200_OK
+    )
