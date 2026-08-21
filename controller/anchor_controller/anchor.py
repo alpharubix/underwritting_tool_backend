@@ -10,7 +10,7 @@ from starlette import status as status
 
 async def get_anchors(request: Request,page:int=1):
 
-    limit=1
+    limit=10
     requester_role = request.state.role
 
     if requester_role not in ('ADMIN','SUPER_ADMIN'):
@@ -97,7 +97,8 @@ async def get_anchors(request: Request,page:int=1):
             "message": "Anchors fetched successfully" if response_status else "No anchors fetched",
             "page":page,
             "limit":limit,
-            "total_pages":total_anchors,
+            "total_pages":total_pages,
+            "total_records":total_anchors,
             "role": requester_role,
             "data": anchor_docs
         },
