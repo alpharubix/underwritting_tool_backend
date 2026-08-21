@@ -22,6 +22,8 @@ from routes.kyc_router import kyc_router
 from routes.ticktes_router import ticket_router
 from routes.user_route import user_router
 from routes.webhook_router import webhook_router
+from routes.anchor_router import anchor_router
+from routes.admin_router import admin_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,7 +76,8 @@ app.include_router(kyc_router)
 app.include_router(cibil_router)
 app.include_router(bank_scoring_router)
 app.include_router(ticket_router)
-
+app.include_router(admin_router)
+app.include_router(anchor_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))

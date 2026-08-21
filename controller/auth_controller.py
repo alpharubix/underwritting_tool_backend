@@ -22,10 +22,7 @@ from pymongo.errors import DuplicateKeyError
 from config.config import AdminStatus,AdminRole
 import secrets 
 import string
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
+
 
 
 async def register_user(
@@ -589,11 +586,15 @@ async def login_admin(request:Request):
 
         else:
             user_id = str(admin["_id"])
+            print(admin)
+            print(user_id)
             admin_role = admin.get("role")
+
             auth_doc= await db.auth.find_one({
                 "user_id":user_id
             })
-
+            print(type(user_id))
+            
             stored_password = auth_doc.get("password_hash")
             if not verify_password(incoming_password,stored_password):
                 return JSONResponse(
@@ -653,6 +654,7 @@ async def create_anchor(request: Request):
         anchor_name = body.get("anchor_name")
         anchor_code = body.get("anchor_code")
         password = body.get("password")
+        role = body.get("role")
 
         if anchor_name is None:
             return JSONResponse(
@@ -712,7 +714,10 @@ async def create_anchor(request: Request):
 
             # User who created the anchor
             "created_by": ObjectId(request.state.user_id),
-            "modified_by": ObjectId(request.state.user_id)
+            "modified_by": ObjectId(request.state.user_id),
+
+            #additional - prathamesh modified
+            "role":role
         }
 
         result = await database["anchors"].insert_one(anchor_doc)
@@ -805,34 +810,56 @@ async def anchor_login(request: Request):
             content={"message": "Internal server error contact admin for support"},
         )
 
+
+
 async def dashboard_admins(request:Request):
     db = request.app.state.mongo_db
     requester_role = request.state.role
+    # if super-admin - admins and super-anchors and anchors
+    # if admin - super-anchors , anchors and users
+    # if super-anchors - anchors , users
+    # if anchors - users
     print("Requester Role : ",requester_role)
 
-    ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN"}
+    ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN","SUPER_ANCHOR","ANCHOR"}
+
     if requester_role not in ALLOWED_ROLES:
         return JSONResponse(
             content={"message":"Forbidden access !"},
             status_code=status.HTTP_403_FORBIDDEN
         )
-
-    users =  await db.users.find({},{"_id":0}).to_list(length=None)
-    anchors = await db.anchors.find({},{"_id":0,"created_by":0,"modified_by":0}).to_list(length=None)
+    
+    user_id = request.state.user_id
+    users =  await db.users.find({"anchor_id":user_id},{"_id":0}).to_list(length=None)
 
     if requester_role == "SUPER_ADMIN":
-        #view ADMINS info
+        # admins, super_anchors, anchors,users
         admins = await db.admins.find({"role":"ADMIN"},{"_id":0}).to_list(length=None)
-        data = {"role":requester_role,"admins":admins,"anchors":anchors}
+        super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
+        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+        data = {"role":requester_role,"super_anchors":super_anchors,"admins":admins,"anchors":anchors,"users":users}
+        return data
 
+    elif requester_role == "ADMIN":
+        #super_anchors, anchors,users
+        super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
+        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+        data = {"role":requester_role,"super_anchors":super_anchors,"anchors":anchors,"users":users}
+        return data
+
+    elif requester_role == "SUPER_ANCHOR":
+        # anchors, users
+        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+        data = {"role":requester_role,"anchors":anchors,"users":users}
         return data
 
     else:
+        #anchor
         #view USERS info, he is admin
-        data={"role":"admin","users":users}
+        data={"role":requester_role,"users":users}
         return data
 
-#STARTED THE MODIFICATION
+
 async def update_admin(request:Request,incoming_login_id:str):
     #ONLY SUPER ADMIN PREVILEGE
     requested_role = request.state.role
@@ -924,7 +951,6 @@ async def update_admin(request:Request,incoming_login_id:str):
         status_code=status.HTTP_200_OK
     )
 
-
 async def create_super_admin(request:Request,incoming_super_key:str):
     super_admin_key = os.getenv("SUPER_ADMIN_KEY")
 
@@ -966,15 +992,15 @@ async def create_super_admin(request:Request,incoming_super_key:str):
         status_code=status.HTTP_201_CREATED
     )
 
+async def create_super_anchor(request:Request):
+    # super_anchor_key = os.getenv("SUPER_ANCHOR_KEY")
+    requester_role = request.state.role
+    ROLES = { AdminRole.SUPER_ADMIN.value , AdminRole.ADMIN.value }
 
-
-async def create_super_anchor(request:Request,incoming_super_key:str):
-    super_anchor_key = os.getenv("SUPER_ANCHOR_KEY")
-
-    if incoming_super_key!=super_anchor_key:
+    if requester_role not in ROLES:
         return JSONResponse(
-            content={"message":"Please provide the valid super anchor key"},
-            status_code=status.HTTP_400_BAD_REQUEST
+            content={"message":"Forbidden access !"},
+            status_code=status.HTTP_403_FORBIDDEN
         )
 
     #create
@@ -1010,3 +1036,13 @@ async def create_super_anchor(request:Request,incoming_super_key:str):
         status_code=status.HTTP_201_CREATED
     )
 
+
+
+
+async def achor_create_user(request:Request):
+    #admin creates the user
+    requester_role=request.state.role
+    ALLOWED_ROLES = {AdminRole.SUPER_ADMIN.value,AdminRole.ADMIN}
+
+    user_id = request.state.user_id
+    

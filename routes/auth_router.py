@@ -106,7 +106,6 @@ async def reset_password(request: Request):
         raise e
 
 
-
 # checking r1xchange account id is there or not
 
 @auth_router.get("/check-r1xchange-account/{acc_id}")
@@ -137,9 +136,8 @@ async def create_anchor_route(request:Request):
 async def login_anchor_route(request:Request):
     return await anchor_login(request)
 
-
 #dashboard - super-admins and admins
-@auth_router.get("/dashboard-admins")
+@auth_router.get("/dashboard/{}")
 async def dashboard_route(request:Request):
     return await dashboard_admins(request)
 
@@ -147,11 +145,14 @@ async def dashboard_route(request:Request):
 async def update_admin_route(request:Request,login_id:str):
     return await update_admin(request,login_id)
 
-
 @auth_router.post("/create-super-admin")
 async def create_super_admin_route(request:Request,super_admin_key:str=Header(...)):
     return await create_super_admin(request,super_admin_key)
 
 @auth_router.post("/create-super-anchor")
-async def create_super_anchor_route(request:Request,super_anchor_key:str=Header(...)):
-    return await create_super_anchor(request,super_anchor_key)
+async def create_super_anchor_route(request:Request):
+    return await create_super_anchor(request)
+
+# @auth_router.post("/admin/create-user")
+# async def create_user_route(request:Request):
+#     return await admin_create_user(request)
