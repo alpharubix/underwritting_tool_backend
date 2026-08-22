@@ -17,6 +17,11 @@ async def get_users_route(request:Request,page: int = 1):
     #regex using 
     return await get_users(request,page)
 
+
+@admin_router.delete('/admins/{login_id}')
+async def delete_admin_route(request:Request,login_id:str):
+    return await delete_admin(request,login_id)
+
 @admin_router.get('/anchors/anchor-list')
 async def get_anchors_route(request:Request,page:int=1):
     return await get_anchors(request,page)
