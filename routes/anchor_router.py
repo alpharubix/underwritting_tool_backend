@@ -1,5 +1,5 @@
 from fastapi import Request,APIRouter
-from controller.anchor_controller.anchor import get_anchors
+from controller.anchor_controller.anchor import get_anchors,update_anchor,delete_anchor
 anchor_router = APIRouter(prefix="/v1/anchor")
 
 # @anchor_router.get("/dashboard")
@@ -11,7 +11,6 @@ anchor_router = APIRouter(prefix="/v1/anchor")
 #         limit
 #     )
 
-    
 # @anchor_router.get("/get-anchors")
 # async def get_anchors_route(request:Request):
 #     """
@@ -27,3 +26,11 @@ async def get_anchors_route(request: Request):
     """
 
     return await get_anchors(request)
+
+@anchor_router.patch("/update/{login_id}")
+async def update_anchor_route(request:Request,login_id:str):
+    return await update_anchor(request,login_id)
+
+@anchor_router.delete("/delete/{login_id}")
+async def delete_anchor_route(request:Request,login_id:str):
+    return await delete_anchor(request,login_id)

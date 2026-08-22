@@ -1,3 +1,4 @@
+from datetime import datetime
 import math
 from typing import Any
 
@@ -34,7 +35,8 @@ async def get_anchors(request: Request,page:int=1):
         "anchor_name",
         "anchor_code",
         "login_id",
-        "is_active"
+        "is_active",
+        "created_"
     }
 
     for filter_field, filter_value in filters.items():
@@ -104,6 +106,101 @@ async def get_anchors(request: Request,page:int=1):
         },
         status_code=status.HTTP_200_OK
     )
+
+async def update_anchor(request:Request,login_id:str):
+    requester_role=request.state.role
+
+    #who can update - super admins and admins
+    if requester_role not in {"SUPER_ADMIN","ADMIN"}:
+        return JSONResponse(
+            content={"message":"Forbidden access !"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    else:
+        db = request.app.state.mongo_db
+        body = await request.json()
+
+        target_anchor = await db.anchors.find_one({"login_id":login_id})
+        if target_anchor is None:
+            return JSONResponse(
+                content={"message":"Anchor not found"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        body.pop("created_at", None)
+        body.pop("created_by", None)
+        body.pop("_id", None)
+
+        body["modified_at"] = datetime.isoformat(datetime.now())
+        body["modified_by"] = request.state.user_id
+        
+        old_data = {
+            key: (
+                target_anchor.get(key).isoformat()
+                if isinstance(target_anchor.get(key), datetime)
+                else target_anchor.get(key)
+            )
+            for key in body.keys()
+        }
+
+        new_data = {
+            key: (
+                value.isoformat()
+                if isinstance(value, datetime)
+                else value
+            )
+            for key, value in body.items()
+        }
+
+        anchor_result = await db.anchors.update_one(
+            {"_id":target_anchor["_id"]},
+            {"$set":new_data}
+            )
+        if anchor_result.modified_count==0:
+            return JSONResponse(
+                content={"message":"Failed to update"},
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        final_updated_data = {
+                "login_id":login_id,
+                f"old data":old_data,
+                f"updated data":new_data
+            }
+        return JSONResponse(
+                content={"message":f"Admin with the login-id : {login_id} has been updated successfully",**final_updated_data},
+                status_code=status.HTTP_200_OK
+            )
+
+async def delete_anchor(request:Request,login_id:str):
+    requester_role = request.state.role
+
+    if requester_role not in {"ADMIN","SUPER_ADMIN","SUPER_ANCHOR"} :
+        return JSONResponse(
+            content={"Cant delete ! Forbidden access"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    db = request.app.state.mongo_db
+    target_anchor = await db.anchors.find_one({"login_id":login_id})
+
+    if target_anchor is None:
+        return JSONResponse(
+            content={"message":"Anchor not found for the deletion"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    else:
+        anchor_delete = await db.anchors.delete_one({
+            "login_id":login_id,
+            "role":"ANCHOR"
+        })
+        if anchor_delete.deleted_count == 0:
+            return JSONResponse(
+                content={"message":"Couldnt delete | Internal Server Error"},
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        return JSONResponse(
+            content={"message":"Anchor deleted successfully !"},
+            status_code=status.HTTP_410_GONE
+            )
+
 
 # async def anchor_dashboard(
 #     request: Request,

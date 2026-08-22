@@ -134,54 +134,90 @@ async def update_admin(request:Request,incoming_login_id:str):
         content={"message":f"Admin with the login-id : {incoming_login_id} has been updated successfully",**final_updated_data},
         status_code=status.HTTP_200_OK
     )
-
-async def dashboard_admins(request:Request):
-    db = request.app.state.mongo_db
+async def delete_admin(request:Request,login_id:str):
     requester_role = request.state.role
-    # if super-admin - admins and super-anchors and anchors
-    # if admin - super-anchors , anchors and users
-    # if super-anchors - anchors , users
-    # if anchors - users
-    print("Requester Role : ",requester_role)
 
-    ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN","SUPER_ANCHOR","ANCHOR"}
-
-    if requester_role not in ALLOWED_ROLES:
-        print("Inside not allowed roles")
+    if requester_role !="SUPER_ADMIN" :
         return JSONResponse(
-            content={"message":"Forbidden access !"},
+            content={"Cant delete ! Forbidden access"},
             status_code=status.HTTP_403_FORBIDDEN
         )
-    
-    user_id = request.state.user_id
-    users =  await db.users.find({"anchor_id":user_id},{"_id":0}).to_list(length=None)
+    db = request.app.state.mongo_db
+    target_admin = await db.admins.find_one({"login_id":login_id})
 
-    if requester_role == "SUPER_ADMIN":
-        # admins, super_anchors, anchors,users
-        admins = await db.admins.find({"role":"ADMIN"},{"_id":0}).to_list(length=None)
-        super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
-        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-        data = {"role":requester_role,"super_anchors":super_anchors,"admins":admins,"anchors":anchors,"users":users}
-        return data
-
-    elif requester_role == "ADMIN":
-        #super_anchors, anchors,users
-        super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
-        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-        data = {"role":requester_role,"super_anchors":super_anchors,"anchors":anchors,"users":users}
-        return data
-
-    elif requester_role == "SUPER_ANCHOR":
-        # anchors, users
-        anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-        data = {"role":requester_role,"anchors":anchors,"users":users}
-        return data
-
+    if target_admin is None: 
+        return JSONResponse(
+            content={"message":"Admin not found for the deletion"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
     else:
-        #anchor
-        #view USERS info, he is admin
-        data={"role":requester_role,"users":users}
-        return data
+        admin_delete = await db.admins.delete_one({
+            "login_id":login_id,
+            "role":"ADMIN"
+        })
+
+        auth_delete = await db.auth.delete_one({
+            "_id":ObjectId(target_admin["_id"])
+        })
+
+        if admin_delete.deleted_count == 0 or auth_delete.deleted_count==0:
+            return JSONResponse(
+                content={"message":"Couldnt delete | Internal Server Error"},
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        return JSONResponse(
+            content={"message":"Admin deleted successfully !"},
+            status_code=status.HTTP_410_GONE
+            )
+
+
+# async def dashboard_admins(request:Request):
+#     db = request.app.state.mongo_db
+#     requester_role = request.state.role
+#     # if super-admin - admins and super-anchors and anchors
+#     # if admin - super-anchors , anchors and users
+#     # if super-anchors - anchors , users
+#     # if anchors - users
+#     print("Requester Role : ",requester_role)
+
+#     ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN","SUPER_ANCHOR","ANCHOR"}
+
+#     if requester_role not in ALLOWED_ROLES:
+#         print("Inside not allowed roles")
+#         return JSONResponse(
+#             content={"message":"Forbidden access !"},
+#             status_code=status.HTTP_403_FORBIDDEN
+#         )
+    
+#     user_id = request.state.user_id
+#     users =  await db.users.find({"anchor_id":user_id},{"_id":0}).to_list(length=None)
+
+#     if requester_role == "SUPER_ADMIN":
+#         # admins, super_anchors, anchors,users
+#         admins = await db.admins.find({"role":"ADMIN"},{"_id":0}).to_list(length=None)
+#         super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
+#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+#         data = {"role":requester_role,"super_anchors":super_anchors,"admins":admins,"anchors":anchors,"users":users}
+#         return data
+
+#     elif requester_role == "ADMIN":
+#         #super_anchors, anchors,users
+#         super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
+#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+#         data = {"role":requester_role,"super_anchors":super_anchors,"anchors":anchors,"users":users}
+#         return data
+
+#     elif requester_role == "SUPER_ANCHOR":
+#         # anchors, users
+#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
+#         data = {"role":requester_role,"anchors":anchors,"users":users}
+#         return data
+
+#     else:
+#         #anchor
+#         #view USERS info, he is admin
+#         data={"role":requester_role,"users":users}
+#         return data
 
 # async def get_userss(request:Request,page:int):
     
