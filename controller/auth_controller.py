@@ -19,6 +19,7 @@ import uuid
 from starlette.requests import Request
 from pymongo.errors import DuplicateKeyError
 from config.config import AdminStatus,AdminRole
+from utils.auth_utility import is_password_valid
 import secrets 
 import string
 
@@ -1014,9 +1015,16 @@ async def create_super_anchor(request:Request):
         secrets.choice(string.digits)
         for _ in range(2)
     )
-
+    now = datetime.now(timezone.utc)
     login_id = letters+digits
     password = body.get("password")
+    result,message=is_password_valid(password)
+
+    if not result:
+        return JSONResponse(
+            content=message,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
     hashed_password = hash_password(password)
     anchor_result = await db.anchors.insert_one({
         "login_id":login_id,
@@ -1024,7 +1032,13 @@ async def create_super_anchor(request:Request):
         "role":"SUPER_ANCHOR"
     })
 
-    if anchor_result.inserted_id is None:
+    auth_result = await db.auth.insert_one({
+        "user_id":anchor_result.inserted_id,
+        "password_hash":hashed_password,
+        "password_changed_at":now
+    })
+    
+    if anchor_result.inserted_id is None or auth_result.inserted_id is None:
         return JSONResponse(
             content={"message":"Error while creating the super-admin"},
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
