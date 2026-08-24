@@ -339,6 +339,69 @@ async def get_users(request:Request,page:int=1):
     status_code=status.HTTP_200_OK
 )
 
+async def get_users_per_anchor(request:Request,page:int):
+    requester_role = request.state.role
+    """IF SUPER-ADMIN IS LOGGING, THERE IS SEPERATE ENDPOINT - since this is endpoint grouping users under one anchor 
+        super-admin endpoint is : /users
+    """
+    if requester_role not in ALLOWED_ROLES:
+        return JSONResponse(
+            content={"message":"Forbidden access !"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    else:
+        """
+        in the users docs , you have anchor id, as object id - > 
+        You have object id of the anchor in the request , so target_anchor can hold that values
+        """
+        target_anchor=ObjectId(request.state.user_id)
+        db = request.app.state.mongo_db
+        limit = 10
+        skip = (page - 1) * limit
+        projection ={
+            "_id":0,
+            "anchor_id":0
+        }
+
+        users = await db.users.find({"anchor_id":target_anchor},projection).skip(skip).limit(limit).to_list(length=limit)
+
+        for user in users: #For converting "datetime" fields
+            if user.get("created_at"):
+                user["created_at"]=user["created_at"].isoformat()
+
+            if user.get("updated_at"):
+                user['updated_at']=user["updated_at"].isoformat()
+            else:
+                #future expansion (for other fields which are not str)
+                continue
+
+        if not users:
+            return JSONResponse(
+                content={"message":"No users found for this anchor"},
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        
+        total_records = await db.users.count_documents({
+            "anchor_id": target_anchor
+        })
+        total_pages = math.ceil(len(total_records) / limit)
+
+        return JSONResponse(
+            content={
+                "message":"Users fetched successfully for the anchor",
+                "data":users,
+                "page_info":{
+                            "page":page,
+                            "limit":limit,
+                            "total_pages":total_pages,
+                            "total_records":len(users),
+                }
+            },
+            status_code=status.HTTP_200_OK
+        )
+
+
+
 
 # async def anchor_dashboard(
 #     request: Request,
