@@ -164,7 +164,7 @@ async def user_login(mongodb_connection, input_data: dict):
             key="access_token",
             value=token,
             httponly=True,
-            secure=True,
+            secure=False,
             samesite="None",)
 
         return response
@@ -602,7 +602,7 @@ async def login_admin(request:Request):
                 )
 
             token = create_access_token({
-                        "user_id": user_id,
+                        "user_id": str(admin["_id"]),
                         "role": admin_role
                     })
             
@@ -611,7 +611,7 @@ async def login_admin(request:Request):
                         status_code=status.HTTP_200_OK,
                         content={
                             "status": True,
-                            "message": f"Login successful | role : {admin_role}"}
+                            "message": f"Login successful "}
                     )
     
             response.set_cookie(
@@ -797,7 +797,7 @@ async def anchor_login(request: Request):
             key="access_token",
             value=token,
             httponly=True,
-            secure=True,
+            secure=False,
             samesite="None", )
 
         return response

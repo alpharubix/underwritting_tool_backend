@@ -1,7 +1,7 @@
 import math
 from typing import Any
 
-from fastapi import Header,Request,status
+from fastapi import HTTPException, Header,Request,status
 from bson import ObjectId
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -540,3 +540,12 @@ async def get_anchors(request: Request,page:int=1):
         },
         status_code=status.HTTP_200_OK
     )
+async def get_current_admin(user_id,db):
+    try:
+        admin = db.admins.find_one({
+            "_id":user_id
+        })
+        if not admin:
+            raise HTTPException(status_code=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+        raise e

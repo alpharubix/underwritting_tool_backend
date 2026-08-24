@@ -5,22 +5,50 @@ from starlette.responses import JSONResponse
 from starlette import status
 
 
-async def get_current_user(user_id, mongodb_connection:AsyncIOMotorClient)->dict:
+async def get_current_user(user_id,role,mongodb_connection:AsyncIOMotorClient)->dict:
     try:
-        user_collection = mongodb_connection["users"]
-        user = await user_collection.find_one(
-            {"_id": ObjectId(user_id)},
-            {
-                "_id": 0,
-                "email_id": 1,
-                "login_id": 1,
-                "user_id":user_id,
-                "customer_name": 1,
-                "phone": 1,
-                "company_name": 1,
-                "gst_number": 1,
-                "status": 1
-            })
+        user=None
+        print(role)
+        print(user_id)
+        if role in ("SUPER_ADMIN","ADMIN"):
+            user = await mongodb_connection.admins.find_one(
+                {"_id":ObjectId(user_id)},
+                {
+                    "_id":0,
+                    "login_id":1,
+                    "admin_status":1,
+                    "role":1
+                }
+                )
+
+        elif role in ("SUPER_ANCHOR","ANCHOR"):
+            user = await mongodb_connection.anchors.find_one(
+                {"_id": ObjectId(user_id)},
+                {
+                    "_id": 0,
+                    "anchor_name": 1,
+                    "anchor_code": 1,
+                    "login_id":1,
+                    "is_active":1,
+                    "role":1
+                })
+
+
+        else:   
+            user_collection = mongodb_connection["users"]
+            user = await user_collection.find_one(
+                {"_id": ObjectId(user_id)},
+                {
+                    "_id": 0,
+                    "email_id": 1,
+                    "login_id": 1,
+                    "user_id":user_id,
+                    "customer_name": 1,
+                    "phone": 1,
+                    "company_name": 1,
+                    "gst_number": 1,
+                    "status": 1
+                })
 
         if not user:
            raise HTTPException(status_code=status.HTTP_204_NO_CONTENT, detail="Requested User Not Found please contact admin for support")
@@ -38,7 +66,6 @@ async def get_current_user(user_id, mongodb_connection:AsyncIOMotorClient)->dict
 async def update_current_user(user_id, body, mongodb_connection: AsyncIOMotorClient):
     data = body.model_dump()
     print(data)
-
 
     try:
         user_collection = mongodb_connection["users"]
