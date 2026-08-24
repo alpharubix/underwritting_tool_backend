@@ -1,13 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 from typing import Any
 
+from bson import ObjectId
 from fastapi import Request,Header
 from starlette.responses import JSONResponse
 from starlette import status as status
 
 
 
+ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR"}
 
 async def get_anchors(request: Request,page:int=1):
 
@@ -69,13 +71,15 @@ async def get_anchors(request: Request,page:int=1):
     }
 
 
-    total_anchors = await db.anchors.count_documents({})
-
+    total_anchors = await db.anchors.count_documents(query)
+    skip = (page-1)*limit
     anchor_docs = await (
         db.anchors
         .aggregate([
             {"$match": query},
-            projection
+            projection,
+            {"$skip": skip},
+            {"$limit": limit}
         ])
         .to_list(length=None)
     )
@@ -132,7 +136,7 @@ async def update_anchor(request:Request,login_id:str):
 
         body["modified_at"] = datetime.isoformat(datetime.now())
         body["modified_by"] = request.state.user_id
-        
+
         old_data = {
             key: (
                 target_anchor.get(key).isoformat()
@@ -200,6 +204,140 @@ async def delete_anchor(request:Request,login_id:str):
             content={"message":"Anchor deleted successfully !"},
             status_code=status.HTTP_410_GONE
             )
+
+
+async def get_users(request:Request,page:int=1):
+    limit = 10
+        
+    EXPECTED_FILTERS = {
+        "account_id": int,
+        "customer_name": str,
+        "company_name": str,
+        "email_id":str,
+        "phone": str,
+        "gst_number": str,
+        "status": str,
+        "created_at": datetime,
+        "updated_at": datetime,
+        "anchor_id": ObjectId
+    }
+
+    #ROLE Validation 
+    requester_role = request.state.role
+    print(requester_role)
+    if requester_role not in ALLOWED_ROLES:
+        return JSONResponse(
+            content={"message": "Forbidden access"},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    
+    #Empty filters validation - may not be used much as frontend is directly sending the correct filters only
+    filters = dict(request.query_params)
+    # if not filters:
+    #     return JSONResponse(
+    #         content={"message": "Filters are needed | Got empty filters"},
+    #         status_code=status.HTTP_400_BAD_REQUEST
+    #     )
+
+    #Filters checking
+    wrong_filters = set(filters.keys()) - set(EXPECTED_FILTERS.keys())
+    for wrong_filter in wrong_filters:
+        filters.pop(wrong_filter)
+
+    query = {}
+    for filter, filter_val in filters.items():
+
+        filter_type = EXPECTED_FILTERS[filter]
+
+        if filter_type == datetime:
+            try:
+                start_date = datetime.fromisoformat(filter_val)
+                end_date = start_date + timedelta(days=1)
+            except ValueError:
+                return JSONResponse(
+                    content={"message": f"Invalid datetime value : {filter_val}"},
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+
+            query[filter] = {
+                "$gte": start_date,
+                "$lt": end_date
+            }
+
+            continue
+
+        try:
+            filter_val = filter_type(filter_val)
+        except (ValueError, TypeError):
+            return JSONResponse(
+                content={
+                    "message": f"Invalid value for {filter} : {filter_val}"
+                },
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        if filter_type == str:
+            query[filter] = {
+                "$regex": f"^{filter_val}",
+                "$options": "i"
+            }
+        else:
+            query[filter] = filter_val                  
+    db = request.app.state.mongo_db
+
+    skip = (page - 1) * limit
+    users = await db.users.aggregate([
+        {
+            "$match": query
+        },
+        {
+            "$project": {
+                "is_deleted": 0
+            }
+        },
+        {
+            "$skip": skip
+        },
+        {
+            "$limit": limit
+        }
+    ]).to_list(length=limit)
+
+    total_users = await db.users.count_documents({})
+
+    total_pages=math.ceil(total_users / limit)
+
+
+    for user in users:
+        user["_id"] = str(user["_id"])
+
+        if "anchor_id" in user:
+            user["anchor_id"] = str(user["anchor_id"])
+
+        if "created_at" in user:
+            user["created_at"] = user["created_at"].isoformat()
+
+        if "updated_at" in user:
+            user["updated_at"] = user["updated_at"].isoformat()
+
+
+    response_status = True
+    if page>total_pages or len(users)<1:
+        # print("Less than 1" if len(users)<1 or "0")
+        print("Condition hit")
+        response_status=False
+
+    return JSONResponse(
+    content={
+        "message": "Users fetched successfully" if response_status else "No users fetched",
+        "data": users,
+        "page_info":{"page": page,
+        "limit": limit,
+        "total_pages":total_pages,
+        "total_data": total_users,
+    }},
+    status_code=status.HTTP_200_OK
+)
 
 
 # async def anchor_dashboard(
