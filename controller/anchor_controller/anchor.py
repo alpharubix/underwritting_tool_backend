@@ -11,21 +11,23 @@ from starlette import status as status
 
 ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR"}
 
-async def get_anchors(request: Request,page:int=1):
+async def get_associated_anchors(request: Request,page:int=1):
 
     limit=10
     requester_role = request.state.role
+    user_id = request.state.user_id
 
-    if requester_role not in ('ADMIN','SUPER_ADMIN'):
+    if requester_role != "SUPER_ANCHOR":
         return JSONResponse(
             content={
                 "message": "Forbidden access !",
-                "role": requester_role
             },
             status_code=status.HTTP_403_FORBIDDEN
         )
 
     db = request.app.state.mongo_db
+
+    anchor_code = await db["anchors"].find_one({"_id":ObjectId(user_id)},{"anchor_code":1})
 
     filters = dict(request.query_params)
 
@@ -34,12 +36,13 @@ async def get_anchors(request: Request,page:int=1):
     }
 
     ALLOWED_FILTERS = {
-        "anchor_name",
-        "anchor_code",
         "login_id",
         "is_active",
         "created_"
     }
+
+    query["anchor_code"] = anchor_code.get("anchor_code")
+    query["role"] = "ANCHOR"
 
     for filter_field, filter_value in filters.items():
 
@@ -57,7 +60,7 @@ async def get_anchors(request: Request,page:int=1):
 
     projection = {
         "$project": {
-            "_id": 0,
+            "_id": {"$toString": "$_id"},
             "anchor_name": 1,
             "anchor_code": 1,
             "login_id": 1,
@@ -101,12 +104,14 @@ async def get_anchors(request: Request,page:int=1):
     return JSONResponse(
         content={
             "message": "Anchors fetched successfully" if response_status else "No anchors fetched",
-            "page":page,
-            "limit":limit,
-            "total_pages":total_pages,
-            "total_records":total_anchors,
             "role": requester_role,
-            "data": anchor_docs
+            "data": anchor_docs,
+            "page_info":{
+                "page": page,
+                "limit": limit,
+                "total_pages": total_pages,
+                "total_records": total_anchors,
+            }
         },
         status_code=status.HTTP_200_OK
     )
@@ -208,8 +213,9 @@ async def delete_anchor(request:Request,login_id:str):
 
 async def get_users(request:Request,page:int=1):
     limit = 10
-        
+
     EXPECTED_FILTERS = {
+        "_id":str,
         "account_id": int,
         "customer_name": str,
         "company_name": str,
@@ -230,25 +236,42 @@ async def get_users(request:Request,page:int=1):
             content={"message": "Forbidden access"},
             status_code=status.HTTP_403_FORBIDDEN
         )
-    
+
+
+
     #Empty filters validation - may not be used much as frontend is directly sending the correct filters only
     filters = dict(request.query_params)
+    query = {}
     # if not filters:
     #     return JSONResponse(
     #         content={"message": "Filters are needed | Got empty filters"},
     #         status_code=status.HTTP_400_BAD_REQUEST
     #     )
 
+    if requester_role == "SUPER_ANCHOR":
+        if filters.get("_id") is None:
+            return JSONResponse(
+                content={"message": "id is required!"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        _id = ObjectId(filters.get("_id"))
+        filters["_id"] = _id #id requst.user-id
+        query["anchor_id"] = _id
+        filters.pop("_id")
+
+    if requester_role == "ANCHOR":
+        user_id = request.state.user_id
+        query["anchor_id"] = ObjectId(user_id)
+
     #Filters checking
     wrong_filters = set(filters.keys()) - set(EXPECTED_FILTERS.keys())
     for wrong_filter in wrong_filters:
         filters.pop(wrong_filter)
 
-    query = {}
+
     for filter, filter_val in filters.items():
 
         filter_type = EXPECTED_FILTERS[filter]
-
         if filter_type == datetime:
             try:
                 start_date = datetime.fromisoformat(filter_val)
@@ -284,7 +307,6 @@ async def get_users(request:Request,page:int=1):
         else:
             query[filter] = filter_val                  
     db = request.app.state.mongo_db
-
     skip = (page - 1) * limit
     users = await db.users.aggregate([
         {

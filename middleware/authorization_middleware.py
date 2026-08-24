@@ -45,9 +45,8 @@ async def authorization(request: Request, call_next):
             r"^/docs$",
             r"^/openapi.json$",
             r"^/v1/auth/admin/login",
-            # r"^/v1/auth/create-super-anchor",
             r"^/v1/auth/create-super-admin",
-            # r"^/v1/auth/create-admin",
+            r"^/v1/auth/anchor/login"
         ]
 
 
