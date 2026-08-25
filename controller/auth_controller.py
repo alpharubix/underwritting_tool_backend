@@ -992,64 +992,101 @@ async def create_super_admin(request:Request,incoming_super_key:str):
         status_code=status.HTTP_201_CREATED
     )
 
-async def create_super_anchor(request:Request):
-    # super_anchor_key = os.getenv("SUPER_ANCHOR_KEY")
+async def create_super_anchor(request: Request):
     requester_role = request.state.role
-    ROLES = { AdminRole.SUPER_ADMIN.value , AdminRole.ADMIN.value }
+
+    ROLES = {
+        AdminRole.SUPER_ADMIN.value,
+        AdminRole.ADMIN.value
+    }
 
     if requester_role not in ROLES:
         return JSONResponse(
-            content={"message":"Forbidden access !"},
+            content={"message": "Forbidden access !"},
             status_code=status.HTTP_403_FORBIDDEN
         )
 
-    #create
     db = request.app.state.mongo_db
     body = await request.json()
 
-    letters = ''.join(
-                secrets.choice(string.ascii_uppercase)
-                for _ in range(4)
-            )
-    digits = ''.join(
-        secrets.choice(string.digits)
-        for _ in range(2)
-    )
-    now = datetime.now(timezone.utc)
-    login_id = letters+digits
     password = body.get("password")
-    result,message=is_password_valid(password)
+
+    result, message = is_password_valid(password)
 
     if not result:
         return JSONResponse(
             content=message,
             status_code=status.HTTP_400_BAD_REQUEST
         )
-    hashed_password = hash_password(password)
-    anchor_result = await db.anchors.insert_one({
-        "login_id":login_id,
-        "password":hashed_password,
-        "role":"SUPER_ANCHOR"
-    })
 
-    auth_result = await db.auth.insert_one({
-        "user_id":anchor_result.inserted_id,
-        "password_hash":hashed_password,
-        "password_changed_at":now
-    })
-    
-    if anchor_result.inserted_id is None or auth_result.inserted_id is None:
-        return JSONResponse(
-            content={"message":"Error while creating the super-admin"},
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-    return JSONResponse(
-        content={"message":"Super anchor credentials created | Please remember the password given","login_id":login_id,"password":password},
-        status_code=status.HTTP_201_CREATED
+    letters = ''.join(
+        secrets.choice(string.ascii_uppercase)
+        for _ in range(4)
     )
 
+    digits = ''.join(
+        secrets.choice(string.digits)
+        for _ in range(2)
+    )
 
+    login_id = letters + digits
+
+    hashed_password = hash_password(password)
+    now = datetime.now(timezone.utc)
+
+    client = request.app.state.mongo_client
+
+    try:
+        async with await client.start_session() as session:
+
+            async with session.start_transaction():
+
+                # 1. Create anchor
+                anchor_result = await db.anchors.insert_one(
+                    {
+                        "login_id": login_id,
+                        "password": hashed_password,
+                        "role": "SUPER_ANCHOR"
+                    },
+                    session=session
+                )
+
+                # Make sure anchor was actually created
+                if not anchor_result.inserted_id:
+                    raise Exception("Failed to create anchor")
+
+                # 2. Create auth record
+                auth_result = await db.auth.insert_one(
+                    {
+                        "user_id": anchor_result.inserted_id,
+                        "password_hash": hashed_password,
+                        "password_changed_at": now
+                    },
+                    session=session
+                )
+
+                # Make sure auth was actually created
+                if not auth_result.inserted_id:
+                    raise Exception("Failed to create auth record")
+
+                # Transaction automatically commits here
+
+        return JSONResponse(
+            content={
+                "message": "Super anchor credentials created | Please remember the password given",
+                "login_id": login_id,
+                "password": password
+            },
+            status_code=status.HTTP_201_CREATED
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "message": "Error while creating the super-anchor"
+            },
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 async def achor_create_user(request:Request):
