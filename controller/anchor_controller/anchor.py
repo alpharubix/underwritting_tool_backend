@@ -225,8 +225,9 @@ async def get_users(request:Request,page:int=1):
         "status": str,
         "created_at": datetime,
         "updated_at": datetime,
-        "anchor_id": ObjectId
+        "anchor_id": ObjectId,
     }
+
 
     #ROLE Validation 
     requester_role = request.state.role
@@ -313,6 +314,124 @@ async def get_users(request:Request,page:int=1):
             "$match": query
         },
         {
+            "$lookup":{
+                "from":"bsa_merged_bankstatements",
+                "let": {
+                    "user_id": {"$toString": "$_id"}
+                },
+                "pipeline":[
+                    {
+                        "$match":{
+                            "$expr":{
+                                "$eq":["$user_id","$$user_id"]
+                            }
+                        }
+                    },{
+                        "$limit":1
+                    }
+                ],
+                "as":"bsa_status"
+            }
+        },
+        {
+                    "$lookup":{
+                        "from":"gst_analyzed_report",
+                        "let": {
+                            "user_id": {"$toString": "$_id"}
+                        },
+                        "pipeline":[
+                            {
+                                "$match":{
+                                    "$expr":{
+                                        "$eq":["$user_id","$$user_id"]
+                                    }
+                                }
+                            },{
+                                "$limit":1
+                            }
+                        ],
+                        "as":"gst_status"
+                    }
+        },
+        {
+                    "$lookup":{
+                        "from":"itr_analyzed_report",
+                        "let": {
+                            "user_id": {"$toString": "$_id"}
+                        },
+                        "pipeline":[
+                            {
+                                "$match":{
+                                    "$expr":{
+                                        "$eq":["$user_id","$$user_id"]
+                                    }
+                                }
+                            },{
+                                "$limit":1
+                            }
+                        ],
+                        "as":"itr_status"
+                    }
+        },
+        {
+                    "$lookup":{
+                        "from":"cibil_report",
+                        "let": {
+                            "user_id": {"$toString": "$_id"}
+                        },
+                        "pipeline":[
+                            {
+                                "$match":{
+                                    "$expr":{
+                                        "$eq":["$user_id","$$user_id"]
+                                    }
+                                }
+                            },{
+                                "$limit":1
+                            }
+                        ],
+                        "as":"cibil_status"
+                    }
+        },
+        {
+            "$set": {
+                "bsa_status": {
+                    "$gt": [
+                        {"$size": "$bsa_status"},
+                        0
+                    ]
+                },
+                "gst_status": {
+                    "$gt": [
+                        {"$size": "$gst_status"},
+                        0
+                    ]
+                },
+                "itr_status": {
+                    "$gt": [
+                        {"$size": "$itr_status"},
+                        0
+                    ]
+                },
+                "cibil_status": {
+                        "$gt": [
+                            {"$size": "$cibil_status"},
+                            0
+                        ]
+                }
+            }
+        },
+
+    # Remove temporary lookup arrays
+        {
+            "$project": {
+                "is_deleted": 0,
+                "bsa_match": 0,
+                "gst_match": 0,
+                "itr_match": 0
+            }
+        },
+        {
             "$project": {
                 "is_deleted": 0
             }
@@ -325,14 +444,13 @@ async def get_users(request:Request,page:int=1):
         }
     ]).to_list(length=limit)
 
-    total_users = await db.users.count_documents({})
+    total_users = await db.users.count_documents(query)
 
     total_pages=math.ceil(total_users / limit)
 
 
     for user in users:
         user["_id"] = str(user["_id"])
-
         if "anchor_id" in user:
             user["anchor_id"] = str(user["anchor_id"])
 

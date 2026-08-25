@@ -1089,10 +1089,97 @@ async def create_super_anchor(request: Request):
         )
 
 
-async def achor_create_user(request:Request):
+async def anchor_create_user(request:Request,_id:str):
     #admin creates the user
     requester_role=request.state.role
-    ALLOWED_ROLES = {AdminRole.SUPER_ADMIN.value,AdminRole.ADMIN}
+    
+    ALLOWED_ROLES = {"SUPER_ANCHOR","ANCHOR"}
 
     user_id = request.state.user_id
+    role = request.state.role
     
+    if role not in ALLOWED_ROLES:
+        return JSONResponse(
+            content={"message":f"Forbidden access ! Your role is {role} "},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    else:
+        db = request.app.state.mongo_db
+        user_data = await request.json()
+
+        email_id = user_data["email_id"].strip().lower()
+        phone = user_data["phone_no"]
+        password = user_data["password"]
+        result,message = is_password_valid(password)
+        existing_user = await db.users.find_one({"email_id":email_id})
+
+        if not result:
+            return JSONResponse(
+                content={"message":message},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        if existing_user:
+            return JSONResponse(
+                content={"message":"User by the email-id already exists"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        
+        existing_phone = await db.users.find_one({"phone":phone})
+        if existing_phone:
+            return JSONResponse(
+                            content={"message":"User by the phone already exists"},
+                            status_code=status.HTTP_400_BAD_REQUEST
+                        )
+
+        user_doc = get_user_dict(
+            account_id=user_data["account_id"],
+            email_id=email_id,
+            phone_no=user_data["phone_no"],
+            company_name=user_data["company_name"],
+            gst_number=user_data["gst_number"],
+            customer_name=user_data["customer_name"],
+            site_code=None
+        )
+        user_doc["role"]="user"
+        hashed_password=hash_password(password)
+        now = datetime.now(timezone.utc)
+
+        if role!="ANCHOR":
+            anchor = await db.anchors.find_one({"_id":ObjectId(_id)}) #assigning the anchor
+
+        if not anchor:
+            return JSONResponse(
+                content={"message":"Assignable anchor not found !"},
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        user_doc["anchor_id"]=ObjectId(_id) if requester_role == "SUPER_ANCHOR" else ObjectId(user_id)
+        user_result = await db.users.insert_one(user_doc)
+
+        auth_doc = {
+            "user_id":user_result.inserted_id,
+            "password_hash":hashed_password,
+            "password_changed_at":now
+        }
+        
+        auth_result = await db.auth.insert_one(auth_doc)
+
+        if not auth_result.inserted_id or not user_result.inserted_id :
+            return JSONResponse(
+                content={"message":"User couldnt be created !"},
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        return JSONResponse(
+            content={
+                "message":"User created succesfully",
+                "data":{
+                    "auth-user_id":str(user_result.inserted_id),
+                    "user_id":str(user_result.inserted_id),
+                    "password":password
+                }
+
+                },
+            status_code=status.HTTP_201_CREATED,
+            
+        )
+        
