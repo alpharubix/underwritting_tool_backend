@@ -6,7 +6,7 @@ from bson import ObjectId
 from fastapi import Request,Header
 from starlette.responses import JSONResponse
 from starlette import status as status
-
+from utils.mappers.ModuleMapping import ModuleMapping,ModuleProjection
 
 
 ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR"}
@@ -209,7 +209,6 @@ async def delete_anchor(request:Request,login_id:str):
             content={"message":"Anchor deleted successfully !"},
             status_code=status.HTTP_410_GONE
             )
-
 
 async def get_users(request:Request,page:int=1):
     limit = 10
@@ -539,6 +538,72 @@ async def get_users_per_anchor(request:Request,page:int):
             },
             status_code=status.HTTP_200_OK
         )
+
+async def get_users_reports(request:Request,module:str,cust_id:str,page:int):
+    requester_role = request.state.role
+    ALLOWED_MODULES = ("bsa","gst","cibil","itr")
+    limit =10
+
+    if requester_role not in ALLOWED_ROLES:
+        return JSONResponse(
+            content={"message":"Forbidden access ! "},
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+    if module not in ALLOWED_MODULES:
+        return JSONResponse(
+            content={"message":"Invalid module requested !"},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    db = request.app.state.mongo_db
+
+    #user id ? of anchor or super anchor 
+    """
+        # if super anchor -> search for anchors -> anchor_id -> 
+        cust_is passed from frontend -> str -> backend converts to object id
+    """
+    
+    total_module_documents = await db[f"{ModuleMapping[module].value}"].count_documents(
+        {"user_id":cust_id}
+    )
+
+    module_data = await db[ModuleMapping[module].value].aggregate([
+        {
+            "$match": {
+                "user_id": cust_id
+            }
+        },
+        ModuleProjection[module].value
+        ]).to_list(length=limit)
+
+    for report in module_data:
+        if "from_date" in report:
+            report["from_date"] = report["from_date"].isoformat()
+
+        if "to_date" in report:
+            report["to_date"] = report["to_date"].isoformat()
+
+        if "generated_on" in report:
+            report["generated_on"]=report["generated_on"].isoformat()
+
+        if "cibil_pulled_date" in report:
+            report["cibil_pulled_date"] = report["cibil_pulled_date"].isoformat()
+
+    print(f"{module} : Found the user : {cust_id} with {total_module_documents} reports ")
+    #db.bank_merge.find_one
+    return JSONResponse(
+        content={
+            "message":f"{module} Report metadata fetched successfully !",
+            "data":module_data,
+            "total_reports":total_module_documents
+            
+        },
+        status_code=status.HTTP_200_OK
+    )
+    
+
+
+
+
 
 
 # async def anchor_dashboard(

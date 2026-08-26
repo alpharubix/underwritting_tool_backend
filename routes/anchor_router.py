@@ -1,5 +1,5 @@
 from fastapi import Query, Request,APIRouter
-from controller.anchor_controller.anchor import get_associated_anchors,update_anchor,delete_anchor,get_users,get_users_per_anchor
+from controller.anchor_controller.anchor import get_associated_anchors, get_users_reports,update_anchor,delete_anchor,get_users,get_users_per_anchor
 anchor_router = APIRouter(prefix="/v1/anchor")
 
 
@@ -24,3 +24,6 @@ async def update_anchor_route(request:Request,login_id:str):
 async def delete_anchor_route(request:Request,login_id:str):
     return await delete_anchor(request,login_id)
 
+@anchor_router.get('/get-user-reports/{module}')
+async def get_user_reports_route(request:Request,module:str,cust_id:str,page:int=1):
+    return await get_users_reports(request,module,cust_id,page)
