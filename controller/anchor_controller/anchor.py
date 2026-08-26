@@ -576,11 +576,11 @@ async def get_users_reports(request:Request,module:str,cust_id:str,page:int):
         ]).to_list(length=limit)
 
     for report in module_data:
-        if "from_date" in report:
-            report["from_date"] = report["from_date"].isoformat()
+        if f"{module}_from_date" in report and module!="gst":
+            report[f"{module}_from_date"] = report[f"{module}_from_date"].isoformat()
 
-        if "to_date" in report:
-            report["to_date"] = report["to_date"].isoformat()
+        if f"{module}_to_date" in report and module!="gst":
+            report[f"{module}_to_date"] = report[f"{module}_to_date"].isoformat() 
 
         if "generated_on" in report:
             report["generated_on"]=report["generated_on"].isoformat()
