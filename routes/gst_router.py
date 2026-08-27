@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from starlette.requests import Request
 from controller.gst_contoller.gst_analyser_controller import get_gstin, update_gstin, get_gstin_basic_info, get_gst_otp, \
@@ -9,9 +11,9 @@ gst_router = APIRouter(prefix="/v1/gst", tags=["gst"])
 
 
 @gst_router.get("/gstin")
-async def gstin(request: Request):
+async def gstin(request: Request,cust_id :Optional[str]=None):
     try:
-        return await get_gstin(request)
+        return await get_gstin(request,cust_id)
     except HTTPException as e:
         raise e
 

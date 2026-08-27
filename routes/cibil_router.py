@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Request
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request
 
 from controller.cibil_controller.cibil_bereau_controller import (
     account_summary,
@@ -12,6 +14,8 @@ from controller.cibil_controller.cibil_bereau_controller import (
     resend_cibil_otp,
     validate_cibil_otp,
 )
+
+ALLOWED_ROLES = ('ADMIN','ANCHOR','SUPER_ANCHOR')
 
 cibil_router = APIRouter(prefix="/v1/cibil",tags=["cibil"])
 
@@ -28,8 +32,18 @@ async def resend_otp(request: Request):
     return await resend_cibil_otp(request=request)
 
 @cibil_router.get("/list-reports")
-async def list_reports(request: Request):
+async def list_reports(request: Request,cust_id:Optional[str]=None):
+    requester_role = request.state.role
+    
     user_id = request.state.user_id
+    if requester_role in ALLOWED_ROLES:
+        if not cust_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+            )
+        user_id = cust_id
+        
     return await get_list_cibil_reports(request=request,user_id=user_id)
 
 @cibil_router.get("/r1xcrm-list-reports/{acc_id}")

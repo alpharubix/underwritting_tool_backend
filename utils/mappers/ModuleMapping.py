@@ -2,40 +2,40 @@ from enum import Enum
 
 class ModuleMapping(str, Enum):
     bsa = "bsa_merged_bankstatements"
-    gst = "gst_analyzed_report"
+    gst="gst_analyzed_report"
     itr = "itr_analyzed_report"
     cibil = "cibil_report"
 
 class ModuleProjection(Enum):
 
-    bsa = {
-        "$project": {
-            "_id": 0,
+    # bsa_previous = {
+    #     "$project": {
+    #         "_id": 0,
 
-            "bsa_from_date": "$from_date",
-            "bsa_to_date": "$to_date",
+    #         "bsa_from_date": "$from_date",
+    #         "bsa_to_date": "$to_date",
 
-            "tenure": {
-                "$add": [
-                    {
-                        "$dateDiff": {
-                            "startDate": "$from_date",
-                            "endDate": "$to_date",
-                            "unit": "month"
-                        }
-                    },
-                    1
-                ]
-            },
+    #         "tenure": {
+    #             "$add": [
+    #                 {
+    #                     "$dateDiff": {
+    #                         "startDate": "$from_date",
+    #                         "endDate": "$to_date",
+    #                         "unit": "month"
+    #                     }
+    #                 },
+    #                 1
+    #             ]
+    #         },
 
-            "generated_on": "$created_at"
-        }
-    }
+    #         "generated_on": "$created_at"
+    #     }
+    # }
 
     gst = {
         "$project": {
             "_id": 0,
-
+            "reference_id":1,
             "gst_from_date": {
                 "$toString": {
                     "$arrayElemAt": [
@@ -44,7 +44,6 @@ class ModuleProjection(Enum):
                     ]
                 }
             },
-
             "gst_to_date": {
                 "$toString": {
                     "$arrayElemAt": [
@@ -53,18 +52,24 @@ class ModuleProjection(Enum):
                     ]
                 }
             },
-
-            "generated_on": "$created_at"
+            "generated_on": "$created_at",
         }
     }
 
+
+    bsa={ # done - bsa_merged_bankstatements col -> looks fine
+        "$project":{
+            "_id":0,
+            "bsa_from_date":"$from_date",
+            "bsa_to_date":"$to_date",
+            "last_merged_reference_id":1,
+            "generated_on":"$created_at"
+        }
+    }
     itr = {
         "$project": {
             "_id": 0,
-            
-            "tenure": {
-                "$literal": 3
-            },
+            "reference_id":1,
             "generated_on": "$created_at"
         }
     }
@@ -72,6 +77,7 @@ class ModuleProjection(Enum):
     cibil = {
         "$project": {
             "_id": 0,
+            "reference_id":1,
             "generated_on": "$cibil_pulled_date"
         }
     }

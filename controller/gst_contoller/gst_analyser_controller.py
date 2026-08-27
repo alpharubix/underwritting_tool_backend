@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from typing import Optional
 import uuid
 import httpx
 import pymongo
@@ -23,6 +24,7 @@ from controller.backgroud_task_controller import send_gst_report_mail_based_on_r
 logger = logging.getLogger(__name__)
 
 
+ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN')
 
 def _is_gstin_valid_for_new_registration(primary_gst,upcoming_gst):
         primary_pan = primary_gst[3:12]
@@ -33,11 +35,21 @@ def _is_gstin_valid_for_new_registration(primary_gst,upcoming_gst):
         else:
             return True
 
-async def get_gstin(request: Request)->JSONResponse:
+async def get_gstin(request: Request,cust_id :Optional[str]=None)->JSONResponse:
     try:
         user_id = request.state.user_id
         user_coll : AsyncIOMotorCollection = request.app.state.mongo_db["users"]
+        requester_role = request.state.role
+        user = None
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
 
+        print(user_id)
         user = await user_coll.find_one({"_id":ObjectId(user_id)},{"_id":1,"gst_number":1,"secondary_gst_list":1})
 
         if not user:

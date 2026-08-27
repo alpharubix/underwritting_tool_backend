@@ -592,7 +592,7 @@ async def get_users_reports(request:Request,module:str,cust_id:str,page:int):
     #db.bank_merge.find_one
     return JSONResponse(
         content={
-            "message":f"{module} Report metadata fetched successfully !",
+            "message":f"{module.upper()} report metadata fetched successfully !",
             "data":module_data,
             "total_reports":total_module_documents
             
