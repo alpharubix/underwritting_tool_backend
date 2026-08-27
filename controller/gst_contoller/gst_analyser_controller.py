@@ -93,7 +93,7 @@ async def get_gstin(request: Request,cust_id :Optional[str]=None)->JSONResponse:
         )
 
 
-async def add_new_gst(request):
+async def add_new_gst(request,cust_id:Optional[str]=None):
     try:
         #step1-> validate the upcoming gstin number
         body = await request.json()
@@ -114,7 +114,15 @@ async def add_new_gst(request):
         user_collection = request.app.state.mongo_db["users"]
 
         user_id = request.state.user_id
+        requester_role = request.state.role
 
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
         primary_gst_info = await user_collection.find_one({"_id": ObjectId(user_id)},{"_id":0,"gst_number":1,"secondary_gst_list":1})
 
         primary_gst = primary_gst_info["gst_number"]
@@ -164,12 +172,19 @@ async def add_new_gst(request):
 
 
 
-async def update_gstin(request: Request)->JSONResponse:
+async def update_gstin(request: Request,cust_id:Optional[str]=None)->JSONResponse:
 
     try:
         user_id = request.state.user_id
         user_coll: AsyncIOMotorCollection = request.app.state.mongo_db["users"]
-
+        requester_role = request.state.role
+        if requester_role in ALLOWED_ROLES:
+                    if not cust_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                        )
+                    user_id = cust_id
         try:
             body = await request.json()
         except json.JSONDecodeError:
@@ -217,9 +232,17 @@ async def update_gstin(request: Request)->JSONResponse:
 
 
 
-async def get_gstin_basic_info(request: Request) -> JSONResponse:
+async def get_gstin_basic_info(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
     try:
         user_id = request.state.user_id
+        requester_role = request.state.role
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
         gstin_info_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gstin_basic_info"]
 
         try:
@@ -648,9 +671,9 @@ async def gst_ref_id_status(request: Request)->JSONResponse:
 
 
 
-async def get_all_user_ref_ids(request: Request,user_id:str)->JSONResponse:
+async def get_all_user_ref_ids(request: Request,cust_id:str)->JSONResponse:
     try:
-
+        user_id = request.state.user_id
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
 
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
@@ -772,6 +795,7 @@ async def gst_webhook_consumer(webhook_data:dict,database:AsyncIOMotorDatabase,b
 
 async def get_overview_and_account_details(request:Request)->JSONResponse:
     try:
+        #pass reference id from body
         input_data = await request.json()
     except JSONDecodeError as e:
         raise HTTPException(status_code=400, detail={"message": "Invalid json format in body"})

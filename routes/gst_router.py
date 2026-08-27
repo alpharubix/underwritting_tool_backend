@@ -19,24 +19,24 @@ async def gstin(request: Request,cust_id :Optional[str]=None):
 
 
 @gst_router.patch("/gstin")
-async def gstin(request: Request):
+async def gstin(request: Request,cust_id:Optional[str]=None):
     try:
-       return await update_gstin(request)
+       return await update_gstin(request,cust_id)
     except HTTPException as e:
         raise e
 
 @gst_router.post("/gstin/add-new")
-async def gstin_add(request: Request):
+async def gstin_add(request: Request,cust_id:Optional[str]=None):
     try:
-        return await add_new_gst(request)
+        return await add_new_gst(request,cust_id)
     except HTTPException as e:
         raise e
 
 
 @gst_router.post("/gstin-basic-info")
-async def gstin_basic_info(request: Request):
+async def gstin_basic_info(request: Request,cust_id:Optional[str]=None):
     try:
-        return await get_gstin_basic_info(request)
+        return await get_gstin_basic_info(request,cust_id)
     except HTTPException as e:
         raise e
 
@@ -70,10 +70,9 @@ async def get_gst_ref_status(request: Request):
         raise e
 
 @gst_router.get("/users-ref-ids")
-async def get_user_ref_id(request: Request):
+async def get_user_ref_id(request: Request,cust_id:Optional[str]=None):
     try:
-        user_id = request.state.user_id
-        return await get_all_user_ref_ids(request,user_id)
+        return await get_all_user_ref_ids(request,cust_id)
     except HTTPException as e:
         raise e
 
