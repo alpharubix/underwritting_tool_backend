@@ -7,8 +7,9 @@ from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
-from config.config import SiteCode
-from utils.auth_utility import hash_password, get_auth_dict,verify_password,create_access_token,is_password_valid,generate_unique_id
+from config.config import SiteCode, AnchorRole
+from utils.auth_utility import hash_password, get_auth_dict, verify_password, create_access_token, generate_unique_id, \
+    get_decoded_jwt_token
 from utils.user_utility import get_user_dict
 from controller.backgroud_task_controller import send_reset_email_to_user
 import dotenv
@@ -16,7 +17,6 @@ dotenv.load_dotenv()
 import os
 from datetime import datetime, timezone
 import uuid
-from starlette.requests import Request
 from pymongo.errors import DuplicateKeyError
 from config.config import AdminStatus,AdminRole
 from utils.auth_utility import is_password_valid
@@ -29,8 +29,9 @@ async def register_user(
     input_data: dict,
     postgres_conn: asyncpg.Connection,
     mongodb_database: AsyncIOMotorDatabase,
-    background_tasks: BackgroundTasks
-) -> dict:
+    background_tasks: BackgroundTasks,
+    jwt_token = None
+) -> JSONResponse:
 
 
     company_name = input_data.get('company_name')
@@ -42,6 +43,7 @@ async def register_user(
     customer_name = input_data.get('customer_name')
     password = input_data.get('password')
     site_code = input_data.get('site_code')
+    anchor_id = input_data.get('anchor_id')
 
     try:
         user_collection = mongodb_database['users']
@@ -52,68 +54,76 @@ async def register_user(
             return JSONResponse(status_code=409, content={'message': 'User already exists!'})
 
         else:
-            #use the from flag to determine which database to check for the user and registration
-
-            if site_code == SiteCode.R1X01.value:
-                table_name = "accounts"
-            elif site_code == SiteCode.PCX01.value:
-                table_name = "accounts_5p"
-            else:
+            #check if the site_code is matching the system sitecode
+           if site_code not in (SiteCode.R1X01.value,SiteCode.PCX01.value,SiteCode.ACX01.value):
                 return JSONResponse(status_code=400, content={'message': 'Invalid site code!'})
 
-            existing_account = await postgres_conn.fetchrow(
+            # check if the user registration request is coming from the anchor
+           if site_code == SiteCode.ACX01.value:
+                #check if the request is from anchor or super anchor
+                if not jwt_token:
+                    return JSONResponse(status_code=401,content={"messgae":"Forbidden access"})
+                decoded_jwt_token = get_decoded_jwt_token(jwt_token)
+                user_id = decoded_jwt_token['user_id']
+                role = decoded_jwt_token['role']
+                if role == AnchorRole.ANCHOR.value:
+                    anchor_id = user_id
+                elif role == AnchorRole.SUPER_ANCHOR.value and anchor_id is None:
+                    return JSONResponse(status_code=400,content={"message":"anchor_id is required"})
+
+           existing_account = await postgres_conn.fetchrow(
                 f"""
-                SELECT id FROM {table_name}
+                SELECT id FROM {os.getenv("ACCOUNTS_TABLE_NAME")}
                 WHERE RIGHT(phone, 10) = RIGHT($1, 10)
                 """,
                 phone_no
             )
-            print("Existing_accounts", existing_account)
+           print("Existing_accounts", existing_account)
 
-            if existing_account:
-                account_id = existing_account['id']
-            else:
-                account_id = await postgres_conn.fetchval(
-                    f"""
-                    INSERT INTO {table_name} (
-                        account_name,
-                        email,
-                        phone,
-                        account_owner_id,
-                        created_time,
-                        custom_fields,
-                        created_by_id
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-                    RETURNING id
-                    """,
-                    company_name,
-                    email_id,
-                    phone_no,
-                    int(account_owner_id),
-                    datetime.now(timezone.utc),
-                    json.dumps({"gst_number": gst_number, "customer_name": customer_name}),
-                    int(created_by_id)
+        if existing_account:
+            account_id = existing_account['id']
+        else:
+            account_id = await postgres_conn.fetchval(
+                f"""
+                INSERT INTO {os.getenv("ACCOUNTS_TABLE_NAME")}(
+                    account_name,
+                    email,
+                    phone,
+                    account_owner_id,
+                    created_time,
+                    custom_fields,
+                    created_by_id
                 )
-
-            hashed_password = hash_password(password)
-
-            user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name,site_code=site_code)
-            auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
-
-            await user_collection.insert_one(user)
-            await auth_collection.insert_one(auth)
-
-            # background_tasks.add_task(
-            #     send_registration_mail_to_user,
-            #     email_id,
-            #     {"name": company_name, "login_id": login_id, "password": password}
-            # )
-
-            return JSONResponse(
-                status_code=201,
-                content={'message': 'User registration successful, please login to continue!'}
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+                RETURNING id
+                """,
+                company_name,
+                email_id,
+                phone_no,
+                int(account_owner_id),
+                datetime.now(timezone.utc),
+                json.dumps({"gst_number": gst_number, "customer_name": customer_name}),
+                int(created_by_id)
             )
+
+        hashed_password = hash_password(password)
+
+        user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name,site_code=site_code,anchor_id=anchor_id)
+        auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
+
+        await user_collection.insert_one(user)
+        await auth_collection.insert_one(auth)
+
+        # background_tasks.add_task(
+        #     send_registration_mail_to_user,
+        #     email_id,
+        #     {"name": company_name, "login_id": login_id, "password": password}
+        # )
+
+        return JSONResponse(
+            status_code=201,
+            content={'message': 'User registration successful, please login to continue!'}
+        )
     except Exception as e:
         print("Error while creating user 5pointcreditsupport:", str(e))
         raise HTTPException(status_code=500, detail="Error while creating user contact 5pointcreditsupport")
@@ -1089,7 +1099,7 @@ async def create_super_anchor(request: Request):
         )
 
 
-async def anchor_create_user(request:Request,_id:str):
+async def anchor_create_user(request:Request,_id:str=None):
     #admin creates the user
     requester_role=request.state.role
     
@@ -1106,6 +1116,7 @@ async def anchor_create_user(request:Request,_id:str):
     else:
         db = request.app.state.mongo_db
         user_data = await request.json()
+        
 
         email_id = user_data["email_id"].strip().lower()
         phone = user_data["phone_no"]

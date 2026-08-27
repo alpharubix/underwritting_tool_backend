@@ -85,6 +85,7 @@ class CibilWebhookStatus(Enum):
 class SiteCode(enum.Enum):
     R1X01 = "R1X01"
     PCX01 = "PCX01"
+    ACX01 = "ACX01"
 
 
 
@@ -104,3 +105,8 @@ class AdminStatus(enum.Enum):
 class AdminRole(enum.Enum):
     SUPER_ADMIN = "SUPER_ADMIN"
     ADMIN = "ADMIN"
+
+class AnchorRole(enum.Enum):
+    SUPER_ANCHOR = "SUPER_ANCHOR"
+    ANCHOR = "ANCHOR"
+

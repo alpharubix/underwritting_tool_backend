@@ -3,12 +3,8 @@ from fastapi.routing import APIRouter
 from starlette.requests import Request
 from json.decoder import JSONDecodeError
 from utils.auth_utility import is_password_valid
-from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,create_anchor,anchor_login
-
 auth_router = APIRouter(prefix="/v1/auth")
 from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,dashboard_admins,update_admin,create_super_admin,create_super_anchor,anchor_login,create_anchor,anchor_create_user
-
-from datetime import date,datetime,timezone
 
 @auth_router.post("/register")
 async def register(request: Request,background_tasks: BackgroundTasks):
@@ -40,8 +36,10 @@ async def register(request: Request,background_tasks: BackgroundTasks):
         if not result:
             raise HTTPException(status_code=400, detail={"message": f"{detail}"})
 
+        jwt_token = request.cookies.get("access_token")
+
         #if all the fields are there proceed for calling the controller
-        return await register_user(input_payload,request.app.state.postgres_conn,request.app.state.mongo_db,background_tasks)
+        return await register_user(input_payload,request.app.state.postgres_conn,request.app.state.mongo_db,background_tasks,jwt_token=jwt_token)
 
     except JSONDecodeError:# json decode error capturing for invalid data
         raise HTTPException(status_code=400, detail={"message":"Invalid body"})
@@ -155,7 +153,7 @@ async def create_super_anchor_route(request:Request):
     return await create_super_anchor(request)
 
 @auth_router.post("/anchor/create-user")
-async def anchor_create_user_route(request:Request,_id:str):
+async def anchor_create_user_route(request:Request,_id:str=None):
     return await anchor_create_user(request,_id)
 
 # @auth_router.post("/admin/create-user")

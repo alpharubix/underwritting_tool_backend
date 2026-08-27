@@ -199,7 +199,7 @@ async def bsa_summary_of_debit_and_credit(request:Request,from_date: Optional[st
             detail="from_date and to_date are required query parameters"
         )
     requester_role = request.state.role
-    
+
     if requester_role in ALLOWED_ROLES:
         if not cust_id:
             raise HTTPException(
@@ -309,14 +309,14 @@ async def cashflow_report(
     db=request.app.state.mongo_db
     user_id=request.state.user_id
     requester_role = request.state.role
-    
+
 
     if requester_role in ALLOWED_ROLES:
         if not cust_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Since the role is on behalf of the user, cust_id is required")
         user_id = cust_id
-    
-    
+
+
     result = await build_cashflow_report(db, user_id, from_month, to_month)
 
     if result.get("status") == "error":

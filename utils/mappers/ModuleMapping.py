@@ -15,6 +15,7 @@ class ModuleProjection(Enum):
     #         "bsa_from_date": "$from_date",
     #         "bsa_to_date": "$to_date",
 
+<<<<<<< Updated upstream
     #         "tenure": {
     #             "$add": [
     #                 {
@@ -27,6 +28,19 @@ class ModuleProjection(Enum):
     #                 1
     #             ]
     #         },
+=======
+            "tenure": {
+                "$add": [
+                    {
+                        "$dateDiff": {
+                            "startDate": "$from_date",
+                            "endDate": "$to_date",
+                            "unit": "month"
+                        }
+                    },
+                ]
+            },
+>>>>>>> Stashed changes
 
     #         "generated_on": "$created_at"
     #     }

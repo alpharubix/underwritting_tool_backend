@@ -1,5 +1,5 @@
 from fastapi import Query, Request,APIRouter
-from controller.anchor_controller.anchor import get_associated_anchors, get_users_reports,update_anchor,delete_anchor,get_users,get_users_per_anchor
+from controller.anchor_controller.anchor import get_associated_anchors, get_users_reports,update_anchor,delete_anchor,get_users
 anchor_router = APIRouter(prefix="/v1/anchor")
 
 
