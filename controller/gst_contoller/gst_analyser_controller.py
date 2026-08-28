@@ -558,7 +558,7 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
                 user_id = cust_id
 
             user_id=request.state.user_id
-            
+
             input_data = await request.json()
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})

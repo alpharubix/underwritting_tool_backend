@@ -20,10 +20,18 @@ logging.basicConfig(level=logging.INFO)
 
 ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
 
-async def initiate_itr_process (request: Request)->JSONResponse:
+async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
     try:
         try:
+            requester_role = request.state.role
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
+                user_id = cust_id
+            
+            user_id=request.state.user_id
             input_data = await request.json()
+            
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid json body","responseCode":None,"data":None})
         if not input_data :
@@ -31,7 +39,7 @@ async def initiate_itr_process (request: Request)->JSONResponse:
 
         if not input_data.get("email_id") :
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Email_id is required","responseCode":None,"data":None})
-        user_id = request.state.user_id
+        
 
         database: AsyncIOMotorDatabase = request.app.state.mongo_db
 

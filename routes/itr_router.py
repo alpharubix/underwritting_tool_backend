@@ -17,8 +17,8 @@ async def itr_data_precheck(request: Request,cust_id:Optional[str]=None)->JSONRe
     return await get_itr_link_status_based_on_user(request,cust_id)
 
 @itr_router.post('/generate-link')
-async def generate_itr_link(request: Request)->JSONResponse:
-    return await initiate_itr_process(request)
+async def generate_itr_link(request: Request,cust_id:Optional[str]=None)->JSONResponse:
+    return await initiate_itr_process(request,cust_id)
 
 @itr_router.post('/check-link-status')
 async def check_ref_status(request: Request)->JSONResponse:
