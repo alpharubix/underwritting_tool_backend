@@ -18,7 +18,7 @@ import os
 from datetime import datetime, timezone
 import uuid
 from pymongo.errors import DuplicateKeyError
-from config.config import AdminStatus,AdminRole
+from config.config import AdminStatus,AdminRole,AnchorRole
 from utils.auth_utility import is_password_valid
 import secrets 
 import string
@@ -176,7 +176,7 @@ async def user_login(mongodb_connection, input_data: dict):
             value=token,
             httponly=True,
             secure=False,
-            samesite="None",)
+            samesite="lax",)
 
         return response
 
@@ -197,7 +197,7 @@ async def user_logout():
         path="/",
         httponly=True,
         secure=True,  # only if using HTTPS
-        samesite="none"  # or "lax" depending on your setup
+        samesite="lax"  # or "lax" depending on your setup
     )
     return response
 
@@ -630,7 +630,7 @@ async def login_admin(request:Request):
                         value=token,
                         httponly=True,
                         secure=False,
-                        samesite=None)
+                        samesite="lax")
             return response
 
     except HTTPException:
@@ -646,11 +646,12 @@ async def login_admin(request:Request):
 async def create_anchor(request: Request):
     try:
         user_role = request.state.role
-
+        user_id = request.state.user_id
         # Only ADMIN and SUPER_ADMIN can create an anchor
         if user_role not in (
             AdminRole.SUPER_ADMIN.value,
-            AdminRole.ADMIN.value
+            AdminRole.ADMIN.value,
+            AnchorRole.SUPER_ANCHOR.value
         ):
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -664,7 +665,6 @@ async def create_anchor(request: Request):
         anchor_name = body.get("anchor_name")
         anchor_code = body.get("anchor_code")
         password = body.get("password")
-        role = body.get("role")
 
         if anchor_name is None:
             return JSONResponse(
@@ -672,11 +672,17 @@ async def create_anchor(request: Request):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        if anchor_code is None:
+        if anchor_code is None and user_role in (AdminRole.SUPER_ADMIN.value, AdminRole.ADMIN.value):
             return JSONResponse(
                 content={"message": "Anchor code is required"},
                 status_code=status.HTTP_400_BAD_REQUEST
             )
+
+        if user_role == AnchorRole.SUPER_ANCHOR.value:
+            anchor = await database["anchors"].find_one({"_id":ObjectId(user_id)},{"anchor_code":1})
+
+            anchor_code = anchor.get("anchor_code")
+
 
         if password is None:
             return JSONResponse(
@@ -693,16 +699,6 @@ async def create_anchor(request: Request):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check whether anchor code already exists
-        existing_anchor = await database["anchors"].find_one(
-            {"anchor_code": anchor_code}
-        )
-
-        if existing_anchor:
-            return JSONResponse(
-                content={"message": "Anchor code already exists"},
-                status_code=status.HTTP_409_CONFLICT
-            )
 
         # Generate unique login ID
         login_id = generate_unique_id()[:5]
@@ -727,7 +723,7 @@ async def create_anchor(request: Request):
             "modified_by": ObjectId(request.state.user_id),
 
             #additional - prathamesh modified
-            "role":role
+            "role":AnchorRole.ANCHOR.value,
         }
 
         result = await database["anchors"].insert_one(anchor_doc)
@@ -809,7 +805,7 @@ async def anchor_login(request: Request):
             value=token,
             httponly=True,
             secure=False,
-            samesite="None", )
+            samesite="lax", )
 
         return response
 
