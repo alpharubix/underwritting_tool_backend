@@ -45,7 +45,7 @@ async def get_gstin(request: Request,cust_id :Optional[str]=None)->JSONResponse:
             if not cust_id:
                 raise HTTPException(
                     status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    detail="cust_id is required"
                 )
             user_id = cust_id
 
