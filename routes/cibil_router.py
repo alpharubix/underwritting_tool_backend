@@ -20,31 +20,20 @@ ALLOWED_ROLES = ('ADMIN','ANCHOR','SUPER_ANCHOR')
 cibil_router = APIRouter(prefix="/v1/cibil",tags=["cibil"])
 
 @cibil_router.post("/generate-otp")
-async def generate_otp(request: Request):
-    return  await generate_cibil_report_otp(request=request)
+async def generate_otp(request: Request,cust_id:Optional[str]=None):
+    return  await generate_cibil_report_otp(request=request,cust_id=cust_id)
 
 @cibil_router.post("/validate-otp")
-async def validate_otp(request: Request):
-    return await validate_cibil_otp(request=request)
+async def validate_otp(request: Request,cust_id:Optional[str]=None):
+    return await validate_cibil_otp(request=request,cust_id=cust_id)
 
 @cibil_router.post("/resend-otp")
-async def resend_otp(request: Request):
-    return await resend_cibil_otp(request=request)
+async def resend_otp(request: Request,cust_id:Optional[str]=None):
+    return await resend_cibil_otp(request=request,cust_id=cust_id)
 
 @cibil_router.get("/list-reports")
-async def list_reports(request: Request,cust_id:Optional[str]=None):
-    requester_role = request.state.role
-    
-    user_id = request.state.user_id
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-            )
-        user_id = cust_id
-        
-    return await get_list_cibil_reports(request=request,user_id=user_id)
+async def list_reports(request: Request,cust_id:Optional[str]=None): 
+    return await get_list_cibil_reports(request=request,cust_id=cust_id)
 
 @cibil_router.get("/r1xcrm-list-reports/{acc_id}")
 async def list_r1xcrm_reports(request: Request,acc_id:int):
