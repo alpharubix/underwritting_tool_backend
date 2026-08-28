@@ -22,7 +22,7 @@ from custom_exceptions.scoreme_exceptions import raise_gst_basic_info_expectatio
 from services.scoreme_service import update_document
 from controller.backgroud_task_controller import send_gst_report_mail_based_on_request
 logger = logging.getLogger(__name__)
-
+from fastapi import status as status
 
 ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN')
 
@@ -668,6 +668,10 @@ async def gst_ref_id_status(request: Request)->JSONResponse:
 async def get_all_user_ref_ids(request: Request,cust_id:str)->JSONResponse:
     try:
         user_id = request.state.user_id
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
 
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
