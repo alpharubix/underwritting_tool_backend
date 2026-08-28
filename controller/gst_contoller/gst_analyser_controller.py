@@ -548,9 +548,17 @@ async def validate_gst_otp_info(request: Request) -> JSONResponse:
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
-async def send_gstin_to_score_me(request: Request)->JSONResponse:
+async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
     try:
         try:
+            requester_role = request.state.role
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
+                user_id = cust_id
+
+            user_id=request.state.user_id
+            
             input_data = await request.json()
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})
@@ -593,7 +601,7 @@ async def send_gstin_to_score_me(request: Request)->JSONResponse:
 
             gst_reference_doc = {
                 "gstin": [gstin.upper()],
-                "user_id":request.state.user_id,
+                "user_id":user_id,
                 "reference_id":scoreme_response_json.get("data").get("referenceId"),
                 "input_data": input_data,
                 "from_month": from_month,

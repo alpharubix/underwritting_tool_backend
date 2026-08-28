@@ -55,9 +55,9 @@ async def validate_otp(request: Request):
         raise e
 
 @gst_router.post("/post-gstin")
-async def post_gstin(request: Request):
+async def post_gstin(request: Request,cust_id:Optional[str]=None):
     try:
-        return await send_gstin_to_score_me(request)
+        return await send_gstin_to_score_me(request,cust_id)
     except HTTPException as e:
         raise e
 
