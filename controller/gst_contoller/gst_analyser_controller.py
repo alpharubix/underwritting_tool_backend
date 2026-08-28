@@ -92,7 +92,6 @@ async def get_gstin(request: Request,cust_id :Optional[str]=None)->JSONResponse:
             }
         )
 
-
 async def add_new_gst(request,cust_id:Optional[str]=None):
     try:
         #step1-> validate the upcoming gstin number
@@ -170,8 +169,6 @@ async def add_new_gst(request,cust_id:Optional[str]=None):
         print(e)
         raise  HTTPException(status_code=500, detail={"message": "Internal server error contact the administrator"})
 
-
-
 async def update_gstin(request: Request,cust_id:Optional[str]=None)->JSONResponse:
 
     try:
@@ -229,8 +226,6 @@ async def update_gstin(request: Request,cust_id:Optional[str]=None)->JSONRespons
     except Exception as e:
         logger.error("Error raised at update_gstin controller",e)
         raise HTTPException(status_code=500, detail={"message": f"Internal server error: {str(e)}"})
-
-
 
 async def get_gstin_basic_info(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
     try:
@@ -668,7 +663,6 @@ async def gst_ref_id_status(request: Request)->JSONResponse:
     except Exception as e:
         logger.error("Error raised at validate_gst_otp_info controller", exc_info=True)
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
-
 
 
 async def get_all_user_ref_ids(request: Request,cust_id:str)->JSONResponse:

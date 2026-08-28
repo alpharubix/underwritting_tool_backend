@@ -55,11 +55,11 @@ async def upload_bsa(
     return response
 
 @bsa_router.post("/upload_ref_id")
-async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks):
+async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks,cust_id:Optional[str]=None):
     try:
           input_data = await request.json()
 
-          return await pdf_upload_consumer(input_body=input_data,user_id=request.state.user_id,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks)
+          return await pdf_upload_consumer(request=request,input_body=input_data,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks,cust_id=cust_id)
 
     except JSONDecodeError:
         raise HTTPException(
