@@ -176,7 +176,7 @@ async def user_login(mongodb_connection, input_data: dict):
             value=token,
             httponly=True,
             secure=False,
-            samesite="None",)
+            samesite="lax",)
 
         return response
 
@@ -197,7 +197,7 @@ async def user_logout():
         path="/",
         httponly=True,
         secure=True,  # only if using HTTPS
-        samesite="none"  # or "lax" depending on your setup
+        samesite="lax"  # or "lax" depending on your setup
     )
     return response
 
@@ -630,7 +630,7 @@ async def login_admin(request:Request):
                         value=token,
                         httponly=True,
                         secure=False,
-                        samesite=None)
+                        samesite="lax")
             return response
 
     except HTTPException:
@@ -805,7 +805,7 @@ async def anchor_login(request: Request):
             value=token,
             httponly=True,
             secure=False,
-            samesite="None", )
+            samesite="lax", )
 
         return response
 

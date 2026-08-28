@@ -179,7 +179,7 @@ async def update_gstin(request: Request,cust_id:Optional[str]=None)->JSONRespons
                     if not cust_id:
                         raise HTTPException(
                             status_code=400,
-                            detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                            detail="cust_id is required"
                         )
                     user_id = cust_id
         try:
@@ -235,7 +235,7 @@ async def get_gstin_basic_info(request: Request,cust_id:Optional[str]=None) -> J
             if not cust_id:
                 raise HTTPException(
                     status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    detail="cust_id is required"
                 )
             user_id = cust_id
         gstin_info_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gstin_basic_info"]
