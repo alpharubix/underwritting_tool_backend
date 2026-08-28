@@ -72,5 +72,5 @@ async def get_r1xcrm_cibil_analysis(request: Request, reference_id: str):
     return await analysis(reference_id=reference_id,request=request)
 
 @cibil_router.get("/webhook-status/{otp_flow_id}")
-async def get_cibil_webhook_status(request: Request, otp_flow_id: str):
-    return await otp_flow_id_webhook_status(otp_flow_id=otp_flow_id,request=request)
+async def get_cibil_webhook_status(request: Request, otp_flow_id: str,cust_id:Optional[str]=None):
+    return await otp_flow_id_webhook_status(otp_flow_id=otp_flow_id,request=request,cust_id=cust_id)

@@ -629,7 +629,7 @@ async def get_list_cibil_reports(request,cust_id) :
                     status_code=status.HTTP_204_NO_CONTENT
                 )
             user_id = cust_id
-            
+
         mongo_db = request.app.state.mongo_db        
 
         cibil_report_collection = mongo_db["cibil_report"]
@@ -869,10 +869,21 @@ async def analysis(reference_id: str, request):
             },
         )
 
-async def otp_flow_id_webhook_status(otp_flow_id,request):
+async def otp_flow_id_webhook_status(otp_flow_id,request,cust_id):
     try:
         mongo_db = request.app.state.mongo_db
         user_id = request.state.user_id
+
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                return JSONResponse(
+                    content={"message":"Customer ID is required ! "},
+                    status_code=status.HTTP_204_NO_CONTENT
+                )
+            user_id = cust_id
+            
         report_status = CibilWebhookStatus.IN_PROGRESS
 
         webhook_status = await mongo_db["cibil_otp_manager"].find_one({"user_id": user_id,"otp_flow_id":otp_flow_id},{"webhook_status":1})

@@ -118,8 +118,8 @@ async def add_new_gst(request,cust_id:Optional[str]=None):
         if requester_role in ALLOWED_ROLES:
             if not cust_id:
                 raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Customer ID is required"
                 )
             user_id = cust_id
         primary_gst_info = await user_collection.find_one({"_id": ObjectId(user_id)},{"_id":0,"gst_number":1,"secondary_gst_list":1})
