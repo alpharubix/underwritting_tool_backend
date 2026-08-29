@@ -22,6 +22,13 @@ class ModuleProjection(Enum):
                     ]
                 }
             },
+            "gst_number": {
+                "$arrayElemAt": [
+                    "$report.Account Details.GSTIN",
+                    0
+                ]
+            },
+
             "gst_to_date": {
                 "$toString": {
                     "$arrayElemAt": [
