@@ -2,37 +2,39 @@ from datetime import datetime, timezone
 from bson import ObjectId
 
 
-def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_name,site_code)->dict:
-            user = {
-                            # Identity
-                            "_id":ObjectId(),
-                            "account_id":account_id,#for mapping
-                            "email_id": email_id.lower(),
-                            "customer_name": customer_name,
-                            "email_verified": False,
-                            "phone": phone_no,
-                            "phone_verified": False,
+def get_user_dict(account_id,email_id,phone_no,company_name,gst_number,customer_name,site_code,anchor_id=None)->dict:
+    user = {
+                    # Identity
+                    "_id":ObjectId(),
+                    "account_id":account_id,#for mapping
+                    "email_id": email_id.lower(),
+                    "customer_name": customer_name,
+                    "email_verified": False,
+                    "phone": phone_no,
+                    "phone_verified": False,
 
-                            # Company Info
-                            "company_name": company_name,
-                            "gst_number": gst_number,
+                    # Company Info
+                    "company_name": company_name,
+                    "gst_number": gst_number,
 
-                            # Status & Security
-                            "status": "active",  # active/inactive/suspended
-                            "role": "user",  # user/admin/manager
-                            "is_deleted": False,
+                    # Status & Security
+                    "status": "active",  # active/inactive/suspended
+                    "role": "user",  # user/admin/manager
+                    "is_deleted": False,
 
-                            # Timestamps
-                            "created_at": datetime.now(timezone.utc),
-                            "updated_at": datetime.now(timezone.utc),
-                            "last_login_at": None,
+                    # Timestamps
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                    "last_login_at": None,
 
-                            # Metadata (optional)
-                            "created_by": "system",
-                            "updated_by": "system",
+                    # Metadata (optional)
+                    "created_by": "system",
+                    "updated_by": "system",
 
-                            #site metadata
-                            "site_code":site_code
+                    #site metadata
+                    "site_code":site_code
 
-                        }
-            return  user
+                }
+    if anchor_id:
+         user["anchor_id"] = ObjectId(anchor_id)
+    return  user

@@ -19,6 +19,9 @@ import os
 from utils.bsa_upload_utility import get_pdf_date_range_parser_prompt
 from dotenv import (load_dotenv)
 load_dotenv()
+
+ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN')
+
 async def pdf_date_parser(files,data_params):
      #validate meta field
     try:
@@ -108,8 +111,18 @@ async def pdf_date_parser(files,data_params):
 
 
 
-async def pdf_upload_consumer(user_id,input_body,mongodb_connection,background_task):
+async def pdf_upload_consumer(request,input_body,mongodb_connection,background_task,cust_id):
     try:
+        user_id = request.state.user_id
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            print("Checked allowed roles")
+            if not cust_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Customer ID is requried")
+            user_id=cust_id
+        elif requester_role == "user":
+            user_id = request.state.user_id      
 
         if not input_body:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"upload_ref_id is required"})

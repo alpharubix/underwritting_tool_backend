@@ -19,7 +19,4 @@ async def get_postgres_conn():
     try:
         return conn
     except Exception as e:
-
-
-
         raise e

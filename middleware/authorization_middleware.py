@@ -44,7 +44,12 @@ async def authorization(request: Request, call_next):
             r"^/v1/crm/accounts-filter/\d+$",
             r"^/docs$",
             r"^/openapi.json$",
+            r"^/v1/auth/admin/login",
+            r"^/v1/auth/anchor/login",
+            r"^/v1/auth/create-super-admin",
+            r"^/v1/auth/anchor/login"
         ]
+
 
         # Check if the current path matches any of our regex patterns
         is_public = any(re.match(pattern, request.url.path) for pattern in public_patterns)
@@ -71,3 +76,6 @@ async def authorization(request: Request, call_next):
         return await call_next(request)
     except HTTPException as e:
      raise e
+
+
+

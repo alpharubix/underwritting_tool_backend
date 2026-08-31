@@ -144,7 +144,7 @@ async def build_cashflow_report_oldVersion(db, user_id: str, from_month: str, to
     if not final_monthly_map:
         raise HTTPException(status_code=404, detail="No usable cashflow data found in range")
 
-    # 4. Aggregation and Summary Calculations
+    # 4. Aggregation and Summary Callations
     totals = {
         "A_inflows": Decimal("0"),
         "B_outflows": Decimal("0"),
@@ -444,7 +444,8 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
         "to_date": {"$gte": query_start},
     }
 
-
+    print(query)
+    
     pipeline = [
     # ---------------------------------------------------------
     # Stage 1

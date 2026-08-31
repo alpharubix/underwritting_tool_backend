@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from pymongo import UpdateOne
 from starlette import status
 from fastapi import HTTPException, BackgroundTasks
@@ -17,11 +18,20 @@ from utils.auth_utility import is_email_valid
 import httpx
 logging.basicConfig(level=logging.INFO)
 
+ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
 
-async def initiate_itr_process (request: Request)->JSONResponse:
+async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
     try:
         try:
+            requester_role = request.state.role
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
+                user_id = cust_id
+            
+            user_id=request.state.user_id
             input_data = await request.json()
+            
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid json body","responseCode":None,"data":None})
         if not input_data :
@@ -29,7 +39,7 @@ async def initiate_itr_process (request: Request)->JSONResponse:
 
         if not input_data.get("email_id") :
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Email_id is required","responseCode":None,"data":None})
-        user_id = request.state.user_id
+        
 
         database: AsyncIOMotorDatabase = request.app.state.mongo_db
 
@@ -136,11 +146,19 @@ async def initiate_itr_process (request: Request)->JSONResponse:
 
 
 
-async def get_itr_link_status_based_on_user(request:Request) -> JSONResponse:
+async def get_itr_link_status_based_on_user(request:Request,cust_id:Optional[str]) -> JSONResponse:
     try:
+        requester_role = request.state.role
         user_id = request.state.user_id
         database = request.app.state.mongo_db
         itr_repo = database["itr_link_management"]
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
 
         existing_links: list = await itr_repo.find(
             {"user_id": user_id},
@@ -412,10 +430,19 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def get_tax_calculation(request: Request,user_id:str) -> JSONResponse:
+async def get_tax_calculation(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
     try:
-
+        user_id = request.state.user_id
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -494,10 +521,20 @@ async def get_r1xcrm_tax_calculation(request: Request,acc_id:int)->JSONResponse:
     
     return await get_tax_calculation(request,str(user["_id"]))
 
-async def get_balance_sheet(request: Request,user_id:str) -> JSONResponse:
+async def get_balance_sheet(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
     try:
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        user_id=request.state.user_id
+        requester_role = request.state.role
+    
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -573,11 +610,19 @@ async def get_r1xcrm_balance_sheet(request:Request,acc_id:int)->JSONResponse:
     
     return await get_balance_sheet(request,str(user["_id"]))
 
-async def get_profit_and_loss_statement(request: Request,user_id:str) -> JSONResponse:
+async def get_profit_and_loss_statement(request: Request,cust_id:str) -> JSONResponse:
     try:
-
+        user_id = request.state.user_id
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-
+        requester_role = request.state.role
+        
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
         document = await itr_repo.find_one(
             {"user_id": user_id},
             {
@@ -655,10 +700,21 @@ async def get_r1xcrm_profit_and_loss_statement(request:Request,acc_id:int)->JSON
     
     return await get_profit_and_loss_statement(request,str(user["_id"]))
 
-async def get_ratio_analysis(request: Request,user_id:str) -> JSONResponse:
+async def get_ratio_analysis(request: Request,cust_id:str) -> JSONResponse:
     try:
 
         itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        user_id = request.state.user_id
+
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                )
+            user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},

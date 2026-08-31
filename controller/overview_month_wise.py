@@ -80,8 +80,8 @@ def _compute_report(monthly_rows: list) -> dict:
         return {}
 
     # 1. Initialize accumulators for all numeric fields
-    num_months = len(monthly_rows)
-    totals = defaultdict(Decimal)
+    num_months = len(monthly_rows) #len is calculated
+    totals = defaultdict(Decimal) #object-data structure of decimal 
     peak_val = Decimal("-Infinity")
     peak_date = "N/A"
 
@@ -135,7 +135,8 @@ def _compute_report(monthly_rows: list) -> dict:
     )
     net_debits_g = gross_debits - totals["Contra"]
     net_cash_outflow = net_debits_g - totals["InhouseDebit"]
-
+    print("Printing totals \n   ")
+    print(totals)
     return {
         "overview": {
             # Convert both to float here
@@ -399,7 +400,11 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
         )
 
     # All math in Python
+    # print("Monthly rows printing - \n")
+    #print(monthly_rows)
     consolidated = _compute_report(monthly_rows)
+    #print("Consolidated printing : \n")
+    # print(consolidated)
     # consolidated.update({
     #     "reference_id": doc.get("merged_reference_id",[]),
     #     "user_id":      str(user_id),

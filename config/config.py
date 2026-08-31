@@ -85,6 +85,7 @@ class CibilWebhookStatus(Enum):
 class SiteCode(enum.Enum):
     R1X01 = "R1X01"
     PCX01 = "PCX01"
+    ACX01 = "ACX01"
 
 
 
@@ -96,3 +97,16 @@ class TicketErrorClassification(enum.Enum):
     USER_INPUT_ERROR = "USER_INPUT_ERROR"
     BUG = "BUG"
     EXTERNAL_ERROR = "EXTERNAL_ERROR"
+
+class AdminStatus(enum.Enum):
+    ACTIVE = "ACTIVE"
+    IN_ACTIVE = "INACTIVE"
+
+class AdminRole(enum.Enum):
+    SUPER_ADMIN = "SUPER_ADMIN"
+    ADMIN = "ADMIN"
+
+class AnchorRole(enum.Enum):
+    SUPER_ANCHOR = "SUPER_ANCHOR"
+    ANCHOR = "ANCHOR"
+

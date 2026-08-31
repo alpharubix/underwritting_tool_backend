@@ -26,10 +26,25 @@ from custom_exceptions.scoreme_exceptions import (
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-async def generate_cibil_report_otp(request)-> JSONResponse:
+
+ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
+
+async def generate_cibil_report_otp(request,cust_id)-> JSONResponse:
     try:
         try: #payload data validation
             input = await request.json()
+
+            user_id=request.state.user_id
+
+            requester_role = request.state.role
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    return JSONResponse(
+                        content={"message":"Cust ID is requried !"},
+                        status_code=status.HTTP_204_NO_CONTENT
+                    )
+                user_id = cust_id
+
         except json.decoder.JSONDecodeError:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid JSON","data":None,"responsecode":"SYS_INPUT_ERR"})
 
@@ -93,7 +108,7 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
             otp_flow_id = str(uuid.uuid4())
 
             construct_cibil_otp_manager = { #constructing otp management object
-                "user_id":request.state.user_id,
+                "user_id":user_id,
                 "otp_flow_id":otp_flow_id,
                 "vendor":"equifax",
                 "reference_id":api_response.get("data").get("referenceId"),
@@ -117,10 +132,21 @@ async def generate_cibil_report_otp(request)-> JSONResponse:
         print("This is the error",e)
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error","data":None,"responsecode":"SYS_INT_ERR"})
 
-async def validate_cibil_otp(request):
+async def validate_cibil_otp(request,cust_id):
     try:
         # Parse JSON
         try:
+            requester_role = request.state.role
+            user_id = request.state.user_id
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    return JSONResponse(
+                        content={"message":"Customer ID is required ! "},
+                        status_code=status.HTTP_204_NO_CONTENT
+                    )
+                user_id = cust_id
+
             payload = await request.json()
         except json.decoder.JSONDecodeError:
             return JSONResponse(
@@ -163,7 +189,7 @@ async def validate_cibil_otp(request):
         otp_document = await coll.find_one(
             {
                 "otp_flow_id": payload["otp_flow_id"],
-                "user_id": request.state.user_id,
+                "user_id": user_id,
             }
         )
 
@@ -591,8 +617,19 @@ async def cibil_webhook_consumer(request):
             },
         )
 
-async def get_list_cibil_reports(request,user_id) :
+async def get_list_cibil_reports(request,cust_id) :
     try:
+        requester_role = request.state.role
+        user_id = request.state.user_id
+
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                return JSONResponse(
+                    content={"message":"Customer ID is required ! "},
+                    status_code=status.HTTP_204_NO_CONTENT
+                )
+            user_id = cust_id
+
         mongo_db = request.app.state.mongo_db        
 
         cibil_report_collection = mongo_db["cibil_report"]
@@ -832,10 +869,21 @@ async def analysis(reference_id: str, request):
             },
         )
 
-async def otp_flow_id_webhook_status(otp_flow_id,request):
+async def otp_flow_id_webhook_status(otp_flow_id,request,cust_id):
     try:
         mongo_db = request.app.state.mongo_db
         user_id = request.state.user_id
+
+        requester_role = request.state.role
+
+        if requester_role in ALLOWED_ROLES:
+            if not cust_id:
+                return JSONResponse(
+                    content={"message":"Customer ID is required ! "},
+                    status_code=status.HTTP_204_NO_CONTENT
+                )
+            user_id = cust_id
+            
         report_status = CibilWebhookStatus.IN_PROGRESS
 
         webhook_status = await mongo_db["cibil_otp_manager"].find_one({"user_id": user_id,"otp_flow_id":otp_flow_id},{"webhook_status":1})
