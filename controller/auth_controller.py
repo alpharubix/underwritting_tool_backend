@@ -629,7 +629,7 @@ async def login_admin(request:Request):
                         key="access_token",
                         value=token,
                         httponly=True,
-                        secure=False,
+                        secure=True,
                         samesite="none")
             return response
 
@@ -804,7 +804,7 @@ async def anchor_login(request: Request):
             key="access_token",
             value=token,
             httponly=True,
-            secure=False,
+            secure=True,
             samesite="none", )
 
         return response
