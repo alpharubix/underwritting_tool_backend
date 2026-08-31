@@ -175,7 +175,7 @@ async def user_login(mongodb_connection, input_data: dict):
             key="access_token",
             value=token,
             httponly=True,
-            secure=False,
+            secure=True,
             samesite="none",)
 
         return response
