@@ -36,7 +36,9 @@ SCOREME_GENERATE_CIBIL_OTP_URL = f"{SCOREME_CIBIL_BASE_URL}/bda/external/retail"
 SCOREME_VALIDATE_CIBIL_OTP_URL = f"{SCOREME_CIBIL_BASE_URL}/bda/external/validateotp"
 SCOREME_RESEND_CIBIL_OTP_URL=  f"{SCOREME_CIBIL_BASE_URL}/bda/external/resendotp"
 
+#razorpav payment api endpoints
 
+RAZORPAY_CREATE_ORDERS_URL="https://api.razorpay.com/v1/orders"
 
 # MongoDB Settings
 MONGODB_DB_NAME = os.getenv("MONGODB_DB_NAME", "underwriting")
@@ -110,3 +112,42 @@ class AnchorRole(enum.Enum):
     SUPER_ANCHOR = "SUPER_ANCHOR"
     ANCHOR = "ANCHOR"
 
+class AllowedService(enum.Enum):
+    BSA = "BSA"
+    ITR = "ITR"
+    GST = "GST"
+    CIBIL = "CIBIL"
+
+class PaymentStatus(enum.Enum):
+    PENDING = "PENDING"
+    AUTHORIZED = "AUTHORIZED"
+    CAPTURED = "CAPTURED"
+    FAILED = "FAILED"
+    REFUNDED = "REFUNDED"
+
+class WalletStatus(enum.Enum):
+    PENDING = "PENDING"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    RESERVED = "RESERVED"
+    FINALIZING = "FINALIZING"
+    CONSUMED = "CONSUMED"
+    RELEASED = "RELEASED"
+
+class ServicePrice(enum.Enum):
+    BSA = 565
+    ITR = 525
+    GST = 561
+    CIBIL =643
+
+class ServiceRequestStatus(enum.Enum):
+    SERVICE_STATUS_CREATED = "CREATED"
+    SERVICE_STATUS_PROCESSING = "PROCESSING"
+    SERVICE_STATUS_SUCCESS = "SUCCESS"
+    SERVICE_STATUS_FAILED = "FAILED"
+
+class UpstreamStatus(enum.Enum):
+    UPSTREAM_STATUS_PENDING = "PENDING"
+    UPSTREAM_STATUS_ACCEPTED = "ACCEPTED"
+    UPSTREAM_STATUS_SUCCESS = "SUCCESS"
+    UPSTREAM_STATUS_FAILED = "FAILED"
