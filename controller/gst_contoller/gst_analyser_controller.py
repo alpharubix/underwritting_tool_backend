@@ -552,12 +552,13 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
     try:
         try:
             requester_role = request.state.role
+            user_id=request.state.user_id
+
             if requester_role in ALLOWED_ROLES:
                 if not cust_id:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
                 user_id = cust_id
 
-            user_id=request.state.user_id
 
             input_data = await request.json()
         except json.JSONDecodeError:
