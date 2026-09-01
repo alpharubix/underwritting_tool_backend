@@ -90,7 +90,7 @@ SCOREME_GST_OTP_ERROR_MAP = {
         "message": "GST OTP generation unsuccessful."
     },
     "EAA049": {
-        "status_code": 401,
+        "status_code": 40,
         "message": "API Access/GSTIN Username Error."
     },
     "EIS050": {
@@ -154,11 +154,11 @@ SCOREME_GST_POST_GSTIN_ERROR_MAP = {
         "message": "Information Source is Not Working."
     },
     "EOA048": {
-        "status_code": 401,
+        "status_code": 400,
         "message": "Please complete the GST OTP generation and authentication process."
     },
     "EAE052": {
-        "status_code": 401,
+        "status_code": 400,
         "message": "Authentication expired. Please generate OTP and authenticate again."
     }
 }
