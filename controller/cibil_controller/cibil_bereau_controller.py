@@ -617,18 +617,20 @@ async def cibil_webhook_consumer(request):
             },
         )
 
-async def get_list_cibil_reports(request,cust_id) :
+async def get_list_cibil_reports(request,cust_id,is_crm:bool = False) :
     try:
-        requester_role = request.state.role
-        user_id = request.state.user_id
+        if is_crm:
+            user_id = cust_id
+        else:
+            user_id = request.state.user_id
+            requester_role = request.state.role
 
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
+            if requester_role in ALLOWED_ROLES:
                 return JSONResponse(
                     content={"message":"Customer ID is required ! "},
                     status_code=status.HTTP_204_NO_CONTENT
                 )
-            user_id = cust_id
+                user_id = cust_id
 
         mongo_db = request.app.state.mongo_db        
 
@@ -668,7 +670,7 @@ async def get_list_r1xcrm_reports(request,acc_id:int):
         if not user:
             raise HTTPException(status_code=404, detail={"message": "No user found for this account id"})
 
-        return await get_list_cibil_reports(request,user_id=str(user["_id"]))
+        return await get_list_cibil_reports(request,cust_id=str(user["_id"]),is_crm=True)
     
     except HTTPException as e:
         logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
