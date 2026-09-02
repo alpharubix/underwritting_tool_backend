@@ -514,10 +514,8 @@ async def cibil_webhook_consumer(
 
         reference_id = data.get("referenceId")
         response_code = webhook_data.get("responseCode")
-        response_message = (
-            webhook_data.get("responseMessage")
-            or webhook_data.get("message")
-        )
+        response_message = webhook_data.get("responseMessage")
+
 
         # --------------------------------------------------
         # 2. Reference ID is mandatory
@@ -836,6 +834,8 @@ async def cibil_webhook_consumer(
 
     except HTTPException as e:
 
+        print("Http exception hit in cibil",e)
+
         logging.error(
             "Error raised at CIBIL webhook consumer controller",
             exc_info=True,
@@ -856,11 +856,9 @@ async def cibil_webhook_consumer(
             },
         )
 
-    except Exception:
+    except Exception as e:
 
-        logging.exception(
-            "Unexpected error in cibil_webhook_consumer"
-        )
+        logging.exception("Unhandled error in cibil_webhook_consumer")
 
         raise HTTPException(
             status_code=500,
