@@ -681,7 +681,9 @@ async def get_all_user_ref_ids(request: Request,cust_id:str,is_crm:bool = False)
             user_id = request.state.user_id
             requester_role = request.state.role
             if requester_role in ALLOWED_ROLES:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
+                if not cust_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
+                user_id = cust_id
 
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)

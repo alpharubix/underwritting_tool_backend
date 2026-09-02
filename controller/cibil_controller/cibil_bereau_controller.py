@@ -626,10 +626,11 @@ async def get_list_cibil_reports(request,cust_id,is_crm:bool = False) :
             requester_role = request.state.role
 
             if requester_role in ALLOWED_ROLES:
-                return JSONResponse(
-                    content={"message":"Customer ID is required ! "},
-                    status_code=status.HTTP_204_NO_CONTENT
-                )
+                if not cust_id:
+                    return JSONResponse(
+                        content={"message":"Customer ID is required ! "},
+                        status_code=status.HTTP_204_NO_CONTENT
+                    )
                 user_id = cust_id
 
         mongo_db = request.app.state.mongo_db        
