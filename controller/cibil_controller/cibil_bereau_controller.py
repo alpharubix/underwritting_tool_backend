@@ -284,7 +284,7 @@ async def validate_cibil_otp(request,cust_id):
                     }
                 },
             )
-            reference_id =  coll.find_one({"_id": otp_document["_id"]})["referenceId"]
+            reference_id =  await coll.find_one({"_id": otp_document["_id"]})["referenceId"]
             if requester_role in ALLOWED_ROLES:
                 reserve_result = await reserve_service_balance(
                     request=request,
