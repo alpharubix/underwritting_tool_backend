@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette import status
@@ -22,12 +24,14 @@ async def request_loan(request: Request):
             content={"message": "Amount must be greater than 0"},
             status_code=status.HTTP_400_BAD_REQUEST
         )
+    now = datetime.now(timezone.utc)
 
     access_money_result = await db.access_money.insert_one(
         {
             "user_id": cust_id,
             "loan_type": loan_type,
-            "amount": amount
+            "amount": amount,
+            "created_at":now
         }
     )
 
