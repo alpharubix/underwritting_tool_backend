@@ -5,18 +5,18 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import HTTPException, BackgroundTasks
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
-
-from config.config import SCOREME_BANK_NAME_URL
+from config.config import SCOREME_BANK_NAME_URL, AllowedService, ServicePrice
 from services.scoreme_service import upload_to_scoreme,create_bsa_ref_document
+from services.service_request_service import create_service_request
 from tasks.bsa_tasks import upload_files_to_gcs_and_save_metadata
 import base64
 import json
 import google.genai as genai
 import os
 from utils.bsa_upload_utility import get_pdf_date_range_parser_prompt
+from controller.payments_controller.wallet_contoller import reserve_service_balance
 from dotenv import (load_dotenv)
 load_dotenv()
 
@@ -121,8 +121,6 @@ async def pdf_upload_consumer(request,input_body,mongodb_connection,background_t
             if not cust_id:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Customer ID is requried")
             user_id=cust_id
-        elif requester_role == "user":
-            user_id = request.state.user_id      
 
         if not input_body:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"upload_ref_id is required"})
@@ -164,6 +162,19 @@ async def pdf_upload_consumer(request,input_body,mongodb_connection,background_t
 
            #create the bsa_ref document post successfull response from the scoreme server
            await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
+
+           if requester_role in ALLOWED_ROLES:
+               # Reserve anchor/admin wallet only for on-behalf-of service requests.
+               print("BSA AMOUNT->",ServicePrice.BSA.value)
+               reserve_result = await reserve_service_balance(request=request,user_id=user_id,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
+               print(reserve_result)
+               if not reserve_result.get("success"):
+                   raise HTTPException(
+                       status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                       detail={"message": reserve_result.get("message")},
+                   )
+
+               await create_service_request(database=request.app.state.mongo_db,user_id=user_id,requested_by=request.state.user_id,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
 
            #create a background task to store the input bsa files to the storage object
            background_task.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)

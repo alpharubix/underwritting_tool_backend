@@ -174,7 +174,7 @@ async def merge_reference_ids(
 
     scoreme_response = response.json()
 
-    new_reference_id = scoreme_response.get("data", {}).get("referenceId")
+    new_reference_id = scoreme_response.get("data").get("referenceId")
     response_message = scoreme_response.get("responseMessage")
     response_code = scoreme_response.get("responseCode")
 

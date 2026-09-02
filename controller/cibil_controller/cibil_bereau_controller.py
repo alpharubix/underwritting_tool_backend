@@ -8,6 +8,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 
 from config.config import (
@@ -16,12 +17,20 @@ from config.config import (
     SCOREME_VALIDATE_CIBIL_OTP_URL,
     CibilOTPStatus,
     CibilWebhookStatus,
+    AllowedService,
+    ServicePrice,
+    WalletStatus,
+    ServiceRequestStatus,
+    UpstreamStatus,
 )
+from controller.payments_controller.wallet_contoller import consume_reserved_balance, release_reserved_balance, reserve_service_balance
 from custom_exceptions.scoreme_exceptions import (
     raise_cibil_otp_exception,
     raise_cibil_resend_otp_exception,
     raise_cibil_validate_otp_exception,
 )
+from services.scoreme_service import update_document
+from services.service_request_service import create_service_request, get_service_request, update_service_request
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -106,12 +115,13 @@ async def generate_cibil_report_otp(request,cust_id)-> JSONResponse:
         if api_response["responseCode"] == "SOS174": #success fall back
 
             otp_flow_id = str(uuid.uuid4())
+            reference_id = api_response.get("data").get("referenceId")
 
             construct_cibil_otp_manager = { #constructing otp management object
                 "user_id":user_id,
                 "otp_flow_id":otp_flow_id,
                 "vendor":"equifax",
-                "reference_id":api_response.get("data").get("referenceId"),
+                "reference_id":reference_id,
                 "otp_status":CibilOTPStatus.OTP_SENT.value,
                 "otp_generated_at":datetime.now(timezone.utc),
                 "verification_attempts": 0,
@@ -212,25 +222,6 @@ async def validate_cibil_otp(request,cust_id):
                     "responseCode": "ERU061",
                 },
             )
-        # if datetime.now(timezone.utc) > expires_at: #expiry check
-        #     await coll.update_one(
-        #         {"_id": otp_document["_id"]},
-        #         {
-        #             "$set": {
-        #                 "otp_status": CibilOTPStatus.OTP_EXPIRED.value,
-        #                 "updated_at": datetime.now(timezone.utc),
-        #             }
-        #         },
-        #     )
-        #
-        #     return JSONResponse(
-        #         status_code=status.HTTP_400_BAD_REQUEST,
-        #         content={
-        #             "message": "OTP has expired.",
-        #             "data": None,
-        #             "responseCode": "SYS_OTP_EXPIRED",
-        #         },
-        #     )
 
         if otp_document["verification_attempts"] >= 3: #total attempts check
             return JSONResponse(
@@ -293,6 +284,30 @@ async def validate_cibil_otp(request,cust_id):
                     }
                 },
             )
+            reference_id =  coll.find_one({"_id": otp_document["_id"]})["referenceId"]
+            if requester_role in ALLOWED_ROLES:
+                reserve_result = await reserve_service_balance(
+                    request=request,
+                    user_id=user_id,
+                    service=AllowedService.ITR.value,
+                    amount=ServicePrice.ITR.value,
+                    reference_id=reference_id,
+                )
+
+                if not reserve_result.get("success"):
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail={"message": reserve_result.get("message")},
+                    )
+
+                await create_service_request(
+                    database=request.app.state.mongo_db,
+                    user_id=user_id,
+                    requested_by=request.state.user_id,
+                    service=AllowedService.ITR.value,
+                    amount=ServicePrice.ITR.value,
+                    reference_id=reference_id,
+                )
 
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
@@ -481,139 +496,372 @@ async def resend_cibil_otp(request):
         )
 
 
-async def cibil_webhook_consumer(request):
+async def cibil_webhook_consumer(
+    webhook_data: dict,
+    database: AsyncIOMotorDatabase,
+    background_task,
+) -> JSONResponse:
     try:
-        input_data = await request.json()
+        # --------------------------------------------------
+        # 1. Extract common webhook data
+        # --------------------------------------------------
 
-        if not input_data:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "message": "Webhook data is empty",
-                    "data": None,
-                    "responseCode": "SYS_INPUT_ERR",
-                },
-            )
+        data = webhook_data.get("data") or {}
 
-        response_code = input_data.get("responseCode")
-        message = input_data.get("message")
-        data = input_data.get("data", {})
         reference_id = data.get("referenceId")
+        response_code = webhook_data.get("responseCode")
+        response_message = (
+            webhook_data.get("responseMessage")
+            or webhook_data.get("message")
+        )
+
+        # --------------------------------------------------
+        # 2. Reference ID is mandatory
+        # --------------------------------------------------
 
         if not reference_id:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "message": "Reference ID is missing",
-                    "data": None,
-                    "responseCode": "SYS_INPUT_ERR",
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Reference id is required"
                 },
             )
 
-        mongo_db = request.app.state.mongo_db
-        otp_manager = mongo_db["cibil_otp_manager"]
+        # --------------------------------------------------
+        # 3. Get CIBIL reference document
+        # --------------------------------------------------
 
-        # Common function to update webhook message
-        async def update_webhook_message(webhook_status=CibilWebhookStatus.PENDING.value):
-            await otp_manager.update_one(
-                {"reference_id": reference_id},
-                {"$set": {"webhook_message": message,"webhook_status":webhook_status}},
-            )
-
-        if response_code == "EOV841":
-            await update_webhook_message(webhook_status=CibilWebhookStatus.FAILED.value)
-
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "message": "Webhook data successfully saved",
-                    "data": None,
-                    "responseCode": "SYS_OK",
-                },
-            )
-
-        if response_code != "SRC001":
-            await update_webhook_message(webhook_status=CibilWebhookStatus.FAILED.value)
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={
-                    "message": "Webhook ignored",
-                    "data": None,
-                    "responseCode": "SYS_OK",
-                },
-            )
-
-        cibil_otp_doc = await otp_manager.find_one({"reference_id": reference_id})
-
-        if not cibil_otp_doc:
-            return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND,
-                content={
-                    "message": "Reference ID not found",
-                    "data": None,
-                    "responseCode": "SYS_NOT_FOUND",
-                },
-            )
-
-        json_url = data.get("jsonUrl")
-        if not json_url:
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "message": "jsonUrl missing",
-                    "data": None,
-                    "responseCode": "SYS_INPUT_ERR",
-                },
-            )
-
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                json_url,
-                headers={
-                    "clientId": os.getenv("CLIENT_ID"),
-                    "clientSecret": os.getenv("CLIENT_SECRET"),
-                },
-            )
-
-        if response.status_code != 200:
-            return JSONResponse(
-                status_code=response.status_code,
-                content={
-                    "message": "Failed to fetch CIBIL report",
-                    "data": None,
-                    "responseCode": "SYS_INT_ERR",
-                },
-            )
-
-        cibil_report = {
-            "user_id": cibil_otp_doc["user_id"],
-            "reference_id": reference_id,
-            "cibil_report":response.json(),
-            "cibil_pulled_date": datetime.now(timezone.utc),
-            "source_urls":data,
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": None,
-        }
-
-        await mongo_db["cibil_report"].insert_one(cibil_report)
-
-        await update_webhook_message(webhook_status=CibilWebhookStatus.SUCCESS.value)
-
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "message": "Webhook data successfully saved",
-                "data": None,
-                "responseCode": "SYS_OK",
+        cibil_ref_doc = await database["cibil_otp_manager"].find_one(
+            {
+                "reference_id": reference_id
+            },
+            {
+                "_id": 0,
+                "user_id": 1,
             },
         )
-    except json.decoder.JSONDecodeError:
+
+        user_id = (
+            cibil_ref_doc.get("user_id")
+            if cibil_ref_doc
+            else None
+        )
+
+        # --------------------------------------------------
+        # 4. Reference ID not found
+        # --------------------------------------------------
+
+        if not cibil_ref_doc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "message": "Reference ID not found"
+                },
+            )
+
+        # ==================================================
+        # FAILURE WEBHOOK
+        # ==================================================
+
+        if response_code != "SRC001":
+
+            # --------------------------------------------------
+            # Update CIBIL reference document
+            # --------------------------------------------------
+
+            await update_document(
+                collection=database["cibil_otp_manager"],
+                filter={
+                    "reference_id": reference_id
+                },
+                fields={
+                    "webhook_status": (
+                        CibilWebhookStatus
+                        .FAILED
+                        .value
+                    ),
+                    "webhook_received_time": (
+                        datetime.now(timezone.utc)
+                    ),
+                    "webhook_response_code": response_code,
+                    "webhook_response_message": response_message,
+                    "source_urls": data,
+                },
+            )
+
+            # --------------------------------------------------
+            # Find active service request
+            # --------------------------------------------------
+
+            service_request = await get_service_request(
+                database=database,
+                filters={
+                    "reference_id": reference_id,
+                    "service_status": (
+                        ServiceRequestStatus
+                        .SERVICE_STATUS_PROCESSING
+                        .value
+                    ),
+                },
+            )
+
+            # --------------------------------------------------
+            # Release reserved wallet balance
+            # --------------------------------------------------
+
+            if service_request and user_id:
+
+                release_result = await release_reserved_balance(
+                    database=database,
+                    service=AllowedService.CIBIL.value,
+                    user_id=user_id,
+                    reference_id=reference_id,
+                    amount=ServicePrice.CIBIL.value,
+                )
+
+                if release_result.get("success"):
+
+                    await update_service_request(
+                        database=database,
+                        reference_id=reference_id,
+                        fields={
+                            "wallet_status": (
+                                WalletStatus.RELEASED.value
+                            ),
+                            "service_status": (
+                                ServiceRequestStatus
+                                .SERVICE_STATUS_FAILED
+                                .value
+                            ),
+                            "upstream_status": (
+                                UpstreamStatus
+                                .UPSTREAM_STATUS_FAILED
+                                .value
+                            ),
+                        },
+                    )
+
+            # --------------------------------------------------
+            # Always acknowledge webhook
+            # --------------------------------------------------
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "Webhook acknowledged"
+                },
+            )
+
+        # ==================================================
+        # SUCCESS WEBHOOK
+        # ==================================================
+
+        json_url = data.get("jsonUrl")
+
+        if not json_url:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Json url is required"
+                },
+            )
+
+        # --------------------------------------------------
+        # Update webhook received status
+        # --------------------------------------------------
+
+        await update_document(
+            collection=database["cibil_otp_manager"],
+            filter={
+                "reference_id": reference_id
+            },
+            fields={
+                "webhook_status": (
+                    CibilWebhookStatus
+                    .SUCCESS
+                    .value
+                ),
+                "webhook_received_time": (
+                    datetime.now(timezone.utc)
+                ),
+                "webhook_response_code": response_code,
+                "webhook_response_message": response_message,
+                "source_urls": data,
+            },
+        )
+
+        # --------------------------------------------------
+        # Fetch CIBIL report
+        # --------------------------------------------------
+
+        async with httpx.AsyncClient(
+            timeout=60
+        ) as client:
+
+            try:
+                response = await client.get(
+                    json_url,
+                    headers={
+                        "clientId": os.getenv("CLIENT_ID"),
+                        "clientSecret": os.getenv("CLIENT_SECRET"),
+                    },
+                )
+
+                response.raise_for_status()
+
+            except httpx.HTTPError:
+                logging.exception(
+                    "Failed to fetch CIBIL report"
+                )
+
+                raise HTTPException(
+                    status_code=502,
+                    detail={
+                        "message": "Failed to fetch CIBIL report"
+                    },
+                )
+
+        # --------------------------------------------------
+        # Parse report
+        # --------------------------------------------------
+
+        cibil_response = response.json()
+
+        # --------------------------------------------------
+        # Mark report as consumed
+        # --------------------------------------------------
+
+        await update_document(
+            collection=database["cibil_otp_manager"],
+            filter={
+                "reference_id": reference_id
+            },
+            fields={
+                "is_consumed": True,
+                "consumed_at": datetime.now(timezone.utc),
+            },
+        )
+
+        # --------------------------------------------------
+        # Find active service request
+        # --------------------------------------------------
+
+        service_request = await get_service_request(
+            database=database,
+            filters={
+                "reference_id": reference_id,
+                "service_status": (
+                    ServiceRequestStatus
+                    .SERVICE_STATUS_PROCESSING
+                    .value
+                ),
+            },
+        )
+
+        # --------------------------------------------------
+        # Consume reserved wallet balance
+        # --------------------------------------------------
+
+        if service_request:
+
+            consume_result = await consume_reserved_balance(
+                database=database,
+                service=AllowedService.CIBIL.value,
+                user_id=user_id,
+                reference_id=reference_id,
+                amount=ServicePrice.CIBIL.value,
+            )
+
+            if consume_result.get("success"):
+
+                await update_service_request(
+                    database=database,
+                    reference_id=reference_id,
+                    fields={
+                        "wallet_status": (
+                            WalletStatus.SUCCESS.value
+                        ),
+                        "service_status": (
+                            ServiceRequestStatus
+                            .SERVICE_STATUS_SUCCESS
+                            .value
+                        ),
+                        "upstream_status": (
+                            UpstreamStatus
+                            .UPSTREAM_STATUS_SUCCESS
+                            .value
+                        ),
+                    },
+                )
+
+        # --------------------------------------------------
+        # Save CIBIL report
+        # --------------------------------------------------
+
+        await database["cibil_report"].insert_one(
+            {
+                "user_id": user_id,
+                "reference_id": reference_id,
+                "cibil_report": cibil_response,
+                "cibil_pulled_date": (
+                    datetime.now(timezone.utc)
+                ),
+                "source_urls": data,
+                "created_at": datetime.now(timezone.utc),
+                "updated_at": None,
+            }
+        )
+
+        # --------------------------------------------------
+        # Background processing if required
+        # --------------------------------------------------
+
+        # background_task.add_task(
+        #     send_cibil_report_mail_based_on_request,
+        #     user_id,
+        #     reference_id,
+        #     database,
+        # )
+
         return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=200,
             content={
-                "message": "Invalid JSON",
-                "data": None,
-                "responseCode": "SYS_INPUT_ERR",
+                "message": "CIBIL report successfully saved"
+            },
+        )
+
+    except HTTPException as e:
+
+        logging.error(
+            "Error raised at CIBIL webhook consumer controller",
+            exc_info=True,
+        )
+
+        raise e
+
+    except httpx.HTTPError:
+
+        logging.exception(
+            "HTTP error in cibil_webhook_consumer"
+        )
+
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "Failed to fetch CIBIL report"
+            },
+        )
+
+    except Exception:
+
+        logging.exception(
+            "Unexpected error in cibil_webhook_consumer"
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Internal server error"
             },
         )
 

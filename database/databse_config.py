@@ -1,4 +1,3 @@
-import dns
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncpg
 import dotenv
@@ -7,7 +6,7 @@ dotenv.load_dotenv(override=True)
 
 
 async def get_mongo_db():
-    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=200,minPoolSize=150)
+    client = AsyncIOMotorClient(os.getenv("MONGO_URI"),serverSelectionTimeoutMS=5000,maxPoolSize=150,minPoolSize=100)
     try:
         db = client["underwriting"]
         return db
