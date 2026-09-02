@@ -523,19 +523,23 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def get_tax_calculation(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
+async def get_tax_calculation(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-        user_id = request.state.user_id
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        requester_role = request.state.role
-
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -612,22 +616,25 @@ async def get_r1xcrm_tax_calculation(request: Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_tax_calculation(request,str(user["_id"]))
+    return await get_tax_calculation(request,str(user["_id"]),is_crm=True)
 
-async def get_balance_sheet(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
+async def get_balance_sheet(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        user_id=request.state.user_id
-        requester_role = request.state.role
-    
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -701,21 +708,26 @@ async def get_r1xcrm_balance_sheet(request:Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_balance_sheet(request,str(user["_id"]))
+    return await get_balance_sheet(request,str(user["_id"]),is_crm=True)
 
-async def get_profit_and_loss_statement(request: Request,cust_id:str) -> JSONResponse:
+async def get_profit_and_loss_statement(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-        user_id = request.state.user_id
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        requester_role = request.state.role
-        
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
+
         document = await itr_repo.find_one(
             {"user_id": user_id},
             {
@@ -791,23 +803,25 @@ async def get_r1xcrm_profit_and_loss_statement(request:Request,acc_id:int)->JSON
             detail="User not found"
         )
     
-    return await get_profit_and_loss_statement(request,str(user["_id"]))
+    return await get_profit_and_loss_statement(request,str(user["_id"]),is_crm=True)
 
-async def get_ratio_analysis(request: Request,cust_id:str) -> JSONResponse:
+async def get_ratio_analysis(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        user_id = request.state.user_id
-
-        requester_role = request.state.role
-
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -884,4 +898,5 @@ async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_ratio_analysis(request,str(user["_id"]))
+    return await get_ratio_analysis(request,str(user["_id"]),is_crm=True)
+

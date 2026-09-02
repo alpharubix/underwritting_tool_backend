@@ -702,20 +702,22 @@ async def gst_ref_id_status(request: Request)->JSONResponse:
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
-async def get_all_user_ref_ids(request: Request,cust_id:str)->JSONResponse:
+async def get_all_user_ref_ids(request: Request,cust_id:str,is_crm:bool = False)->JSONResponse:
     try:
-        user_id = request.state.user_id
-        requester_role = request.state.role
+        if is_crm:
+            user_id = cust_id
+        else:
+            user_id = request.state.user_id
+            requester_role = request.state.role
+            if requester_role in ALLOWED_ROLES:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
 
-        if requester_role in ALLOWED_ROLES:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
-
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
 
         if not docs:
             raise HTTPException(status_code=404, detail={"message": "No reference id found for this user"})
-       #serialize response data
+        #serialize response data
         for doc in docs:
             doc['gstin'] = doc['gstin'][0]
         return JSONResponse(status_code=200,content={"message":"Gst reference id list fetch success","data":docs})
@@ -737,8 +739,7 @@ async def get_r1xcrm_gst_ref_id_status(request: Request,acc_id:int)->JSONRespons
         if not user:
             raise HTTPException(status_code=404, detail={"message": "No user found for this account id"})
 
-        return await get_all_user_ref_ids(request,user_id=str(user["_id"]))
-    
+        return await get_all_user_ref_ids(request,cust_id=str(user["_id"]),is_crm=True)
     except HTTPException as e:
         logger.error("Error raised at get_r1xcrm_gst_ref_id_status controller", exc_info=True)
         raise e
