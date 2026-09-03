@@ -25,13 +25,16 @@ async def get_current_user(user_id,role,mongodb_connection:AsyncIOMotorClient)->
             user = await mongodb_connection.anchors.find_one(
                 {"_id": ObjectId(user_id)},
                 {
-                    "_id": 0,
+                    "_id": 1,
                     "anchor_name": 1,
                     "anchor_code": 1,
                     "login_id":1,
                     "is_active":1,
                     "role":1
                 })
+            if user and "_id" in user:
+                user["user_id"] = str(user["_id"])
+                del user["_id"]
 
 
         else:   
@@ -39,16 +42,18 @@ async def get_current_user(user_id,role,mongodb_connection:AsyncIOMotorClient)->
             user = await user_collection.find_one(
                 {"_id": ObjectId(user_id)},
                 {
-                    "_id": 0,
+                    "_id": 1,
                     "email_id": 1,
                     "login_id": 1,
-                    "user_id":user_id,
                     "customer_name": 1,
                     "phone": 1,
                     "company_name": 1,
                     "gst_number": 1,
                     "status": 1
                 })
+            if user and "_id" in user:
+                user["user_id"] = str(user["_id"])
+                del user["_id"]
 
         if not user:
            raise HTTPException(status_code=status.HTTP_204_NO_CONTENT, detail="Requested User Not Found please contact admin for support")
