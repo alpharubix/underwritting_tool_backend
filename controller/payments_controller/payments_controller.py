@@ -18,7 +18,6 @@ dotenv.load_dotenv()
 async def get_create_order(request: Request):
     try:
         input_body = await request.json()
-
         amount = input_body.get("amount")
         currency = input_body.get("currency")
         service = input_body.get("service")
@@ -363,3 +362,25 @@ async def get_validate_payment(request: Request):
             },
         )
 
+async def get_user_pending_payments(request:Request,service:str):
+    db = request.app.state.mongo_db
+    user_id = request.state.user_id
+    print(user_id)
+    projection = {
+        "_id":0,
+        "id":1,
+        "amount_due":1,
+        "service":1,
+        "amount":1,
+        "payment_status":1,
+        "wallet_status":1
+    }
+
+    conditions = {
+        "user_id":user_id,
+        "payment_status":PaymentStatus.PENDING.value,
+        "service":service
+    }
+    pending_payments = await db.orders.find(conditions,projection).to_list(length=None)
+
+    return pending_payments
