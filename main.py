@@ -11,6 +11,7 @@ from controller.bsa_uploads import UploadHashMap
 from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
 from database.databse_config import get_mongo_db, get_postgres_conn
 from middleware.authorization_middleware import authorization
+from middleware.api_logging_middleware import api_logging
 from routes.accounts_filter_router import accounts_filter_router
 from routes.auth_router import auth_router
 from routes.bank_scoring_routes import bank_scoring_router
@@ -26,6 +27,7 @@ from routes.anchor_router import anchor_router
 from routes.admin_router import admin_router
 from routes.rectify_money_router import rectify_money_router
 from routes.save_money_route import save_money_router
+from routes.log_router import log_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -58,6 +60,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
 app = FastAPI(lifespan=connect_to_databases)
 
 app.middleware("http")(authorization)
+app.middleware("http")(api_logging)
 
 app.add_middleware(
     CORSMiddleware,
@@ -66,6 +69,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Starlette inserts later registrations at the front of the user middleware
+# stack. This makes API logging the outer wrapper: logging -> CORS -> auth -> app.
 
 app.include_router(auth_router)
 app.include_router(user_router)
@@ -82,7 +88,7 @@ app.include_router(admin_router)
 app.include_router(anchor_router)
 app.include_router(rectify_money_router)
 app.include_router(save_money_router)
-
+app.include_router(log_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
