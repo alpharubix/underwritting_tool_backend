@@ -106,7 +106,7 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         ref_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id": reference_id})
         if ref_doc and ref_doc.get("is_merge_request"):
             print(f"reference_id {reference_id} is a merge result — storing directly")
-            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url,ref_doc)
             background_tasks.add_task(
                 send_report_mail_based_on_request,
                 user_id,
@@ -118,27 +118,13 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
             await mongodb_connection["bsa_reference"].update_one({"reference_id": reference_id}, {"$set": {"merge_request_status":"COMPLETED"}})
             return {"status": "success", "message": "Merge result received — report ingestion started"}
 
-        merge_status = await is_reference_id_mergable(
+        merge_status,existing_doc = await is_reference_id_mergable(
             user_id=user_id,
-            reference_id=reference_id,
             json_url=json_url,
             mongodb_connection=mongodb_connection
         )
 
         if merge_status == "MERGABLE":
-            existing_doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
-                {"user_id": user_id, "status": "ACTIVE"},
-                sort=[("created_at", -1)]
-            )
-
-            if not existing_doc:
-                print(f"WARN: No existing doc found for user {user_id} — storing directly")
-                background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-                background_tasks.add_task(
-                    send_report_mail_based_on_request, user_id, reference_id,
-                    request.app.state.mongo_db, request.app.state.postgres_conn,
-                )
-                return {"status": "success", "message": "Fallback — report ingestion started"}
 
             existing_reference_id = existing_doc["last_merged_reference_id"]
             print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
@@ -181,11 +167,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
                                                                           "service_status": ServiceRequestStatus.SERVICE_STATUS_SUCCESS.value,
                                                                           "upstream_status": UpstreamStatus.UPSTREAM_STATUS_SUCCESS.value})
                     print("Service update result", service_update)
-            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-            background_tasks.add_task(
-                send_report_mail_based_on_request, user_id, reference_id,
-                request.app.state.mongo_db, request.app.state.postgres_conn,
-            )
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url,ref_doc)
+            # background_tasks.add_task(
+            #     send_report_mail_based_on_request, user_id, reference_id,
+            #     request.app.state.mongo_db, request.app.state.postgres_conn,
+            # )
             return {"status": "success", "message": "Report ingestion started"}
 
         else:  # ERROR
