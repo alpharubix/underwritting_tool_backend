@@ -28,6 +28,7 @@ from routes.wallet_router import wallet_router
 from routes.rectify_money_router import rectify_money_router
 from routes.save_money_route import save_money_router
 from routes.access_money_route import access_money_router
+from routes.export_router import export_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -87,6 +88,8 @@ app.include_router(wallet_router)
 app.include_router(rectify_money_router)
 app.include_router(save_money_router)
 app.include_router(access_money_router)
+app.include_router(export_router)
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
