@@ -11,9 +11,12 @@ from starlette.requests import Request
 import logging
 from starlette.responses import JSONResponse
 import config.config as url
+from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus
 from controller.backgroud_task_controller import send_itr_report_mail_based_on_request
+from controller.payments_controller.wallet_contoller import consume_reserved_balance, release_reserved_balance, reserve_service_balance
 from custom_exceptions.scoreme_exceptions import raise_itr_post_link_exception
 from services.scoreme_service import update_document
+from services.service_request_service import create_service_request, get_service_request, update_service_request
 from utils.auth_utility import is_email_valid
 import httpx
 logging.basicConfig(level=logging.INFO)
@@ -23,13 +26,13 @@ ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
 async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
     try:
         try:
+            user_id = request.state.user_id
             requester_role = request.state.role
             if requester_role in ALLOWED_ROLES:
                 if not cust_id:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
                 user_id = cust_id
-            
-            user_id=request.state.user_id
+
             input_data = await request.json()
             
         except json.JSONDecodeError as e:
@@ -71,10 +74,11 @@ async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
             raise_itr_post_link_exception(scoreme_response_json)
 
         if scoreme_response_json["responseCode"] == "SRS016":
+            reference_id = scoreme_response_json.get("data").get("referenceId")
             #create itr_reference_doc and store it on the collection
             itr_reference_doc = {
                 "user_id": user_id,
-                "reference_id": scoreme_response_json.get("data").get("referenceId"),
+                "reference_id": reference_id,
                 "input_data": input_data,
                 "itr_reference_id_status": "INPROGRESS",
                 "itr_request_status": scoreme_response_json.get("responseMessage"),
@@ -92,7 +96,7 @@ async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
 
 
             itr_link = {  #link lifecycle management for internal system
-                "reference_id": scoreme_response_json.get("data").get("referenceId"),
+                "reference_id": reference_id,
                 "user_id": user_id,
                 "link_status":"PENDING",
                 "link_generated_at": request_initiated_at,
@@ -118,6 +122,32 @@ async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
                             session=session
                         )
 
+                if requester_role in ALLOWED_ROLES:
+                    reserve_result = await reserve_service_balance(
+                        request=request,
+                        user_id=user_id,
+                        service=AllowedService.ITR.value,
+                        amount=ServicePrice.ITR.value,
+                        reference_id=reference_id,
+                    )
+
+                    if not reserve_result.get("success"):
+                        raise HTTPException(
+                            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                            detail={"message": reserve_result.get("message")},
+                        )
+
+                    await create_service_request(
+                        database=database,
+                        user_id=user_id,
+                        requested_by=request.state.user_id,
+                        service=AllowedService.ITR.value,
+                        amount=ServicePrice.ITR.value,
+                        reference_id=reference_id,
+                    )
+
+            except HTTPException as e:
+                raise e
             except Exception as e:
                 logging.error(
                     "Transaction failed while storing ITR data",
@@ -132,7 +162,7 @@ async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
                         "data": None
                     }
                 )
-            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","responseCode":"SYS_PENDING","data":{"itr_reference_id":scoreme_response_json.get("data").get("referenceId")}})
+            return  JSONResponse(status_code=status.HTTP_200_OK,content={"message":"Email triggered successfully","responseCode":"SYS_PENDING","data":{"itr_reference_id":reference_id}})
         else:
              raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error","responseCode":None,"data":None})
 
@@ -352,6 +382,12 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
         if webhook_data.get("responseCode") != "SRC001":
             data = webhook_data.get("data") or {}
             reference_id = data.get("referenceId")
+            itr_ref_doc = await database["itr_reference"].find_one(
+                {"reference_id": reference_id},
+                {"_id": 0, "user_id": 1}
+            )
+            user_id = itr_ref_doc.get("user_id") if itr_ref_doc else None
+
             await update_document(
                 collection=database["itr_reference"],
                 filter={"reference_id": reference_id},
@@ -364,6 +400,35 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
                     "itr_report_url": data.get("reportUrl"),
                 },
             )
+
+            service_request = await get_service_request(
+                database=database,
+                filters={
+                    "reference_id": reference_id,
+                    "service_status": ServiceRequestStatus.SERVICE_STATUS_PROCESSING.value,
+                },
+            )
+
+            if service_request and user_id:
+                release_result = await release_reserved_balance(
+                    database=database,
+                    service=AllowedService.ITR.value,
+                    user_id=user_id,
+                    reference_id=reference_id,
+                    amount=ServicePrice.ITR.value,
+                )
+
+                if release_result.get("success"):
+                    await update_service_request(
+                        database=database,
+                        reference_id=reference_id,
+                        fields={
+                            "wallet_status": WalletStatus.RELEASED.value,
+                            "service_status": ServiceRequestStatus.SERVICE_STATUS_FAILED.value,
+                            "upstream_status": UpstreamStatus.UPSTREAM_STATUS_FAILED.value,
+                        },
+                    )
+
             return JSONResponse(status_code=200, content={"message": "Webhook acknowledged"})
 
         data = webhook_data.get("data") or {}
@@ -405,6 +470,34 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
 
         await update_document(collection=database["itr_reference"],filter={"reference_id": reference_id},fields={"is_consumed":True,"consumed_at":datetime.now(timezone.utc)})
 
+        service_request = await get_service_request(
+            database=database,
+            filters={
+                "reference_id": reference_id,
+                "service_status": ServiceRequestStatus.SERVICE_STATUS_PROCESSING.value,
+            },
+        )
+
+        if service_request:
+            consume_result = await consume_reserved_balance(
+                database=database,
+                service=AllowedService.ITR.value,
+                user_id=user_id,
+                reference_id=reference_id,
+                amount=ServicePrice.ITR.value,
+            )
+
+            if consume_result.get("success"):
+                await update_service_request(
+                    database=database,
+                    reference_id=reference_id,
+                    fields={
+                        "wallet_status": WalletStatus.SUCCESS.value,
+                        "service_status": ServiceRequestStatus.SERVICE_STATUS_SUCCESS.value,
+                        "upstream_status": UpstreamStatus.UPSTREAM_STATUS_SUCCESS.value,
+                    },
+                )
+
         report_data = response.json().get("ITR") or {}
 
 
@@ -430,19 +523,23 @@ async def itr_webhook_consumer(webhook_data: dict, database: AsyncIOMotorDatabas
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-async def get_tax_calculation(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
+async def get_tax_calculation(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-        user_id = request.state.user_id
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        requester_role = request.state.role
-
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -519,22 +616,25 @@ async def get_r1xcrm_tax_calculation(request: Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_tax_calculation(request,str(user["_id"]))
+    return await get_tax_calculation(request,str(user["_id"]),is_crm=True)
 
-async def get_balance_sheet(request: Request,cust_id:Optional[str]=None) -> JSONResponse:
+async def get_balance_sheet(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        user_id=request.state.user_id
-        requester_role = request.state.role
-    
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -608,21 +708,26 @@ async def get_r1xcrm_balance_sheet(request:Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_balance_sheet(request,str(user["_id"]))
+    return await get_balance_sheet(request,str(user["_id"]),is_crm=True)
 
-async def get_profit_and_loss_statement(request: Request,cust_id:str) -> JSONResponse:
+async def get_profit_and_loss_statement(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-        user_id = request.state.user_id
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        requester_role = request.state.role
-        
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
+
         document = await itr_repo.find_one(
             {"user_id": user_id},
             {
@@ -698,23 +803,25 @@ async def get_r1xcrm_profit_and_loss_statement(request:Request,acc_id:int)->JSON
             detail="User not found"
         )
     
-    return await get_profit_and_loss_statement(request,str(user["_id"]))
+    return await get_profit_and_loss_statement(request,str(user["_id"]),is_crm=True)
 
-async def get_ratio_analysis(request: Request,cust_id:str) -> JSONResponse:
+async def get_ratio_analysis(request: Request,cust_id:Optional[str]=None,is_crm:bool = False) -> JSONResponse:
     try:
-
-        itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
-        user_id = request.state.user_id
-
-        requester_role = request.state.role
-
-        if requester_role in ALLOWED_ROLES:
-            if not cust_id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-                )
+        if is_crm:
             user_id = cust_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+        else:
+            user_id = request.state.user_id
+            itr_repo = request.app.state.mongo_db["itr_analyzed_report"]
+            requester_role = request.state.role
+
+            if requester_role in ALLOWED_ROLES:
+                if not cust_id:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Since the role is accesssing on behalf of user, hence cust_id is required"
+                    )
+                user_id = cust_id
 
         document = await itr_repo.find_one(
             {"user_id": user_id},
@@ -791,4 +898,5 @@ async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
             detail="User not found"
         )
     
-    return await get_ratio_analysis(request,str(user["_id"]))
+    return await get_ratio_analysis(request,str(user["_id"]),is_crm=True)
+

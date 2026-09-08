@@ -25,9 +25,12 @@ from routes.user_route import user_router
 from routes.webhook_router import webhook_router
 from routes.anchor_router import anchor_router
 from routes.admin_router import admin_router
+from routes.payments_router import payments_router
+from routes.wallet_router import wallet_router
 from routes.rectify_money_router import rectify_money_router
 from routes.save_money_route import save_money_router
 from routes.log_router import log_router
+from routes.access_money_route import access_money_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,10 +89,13 @@ app.include_router(bank_scoring_router)
 app.include_router(ticket_router)
 app.include_router(admin_router)
 app.include_router(anchor_router)
+app.include_router(payments_router)
+app.include_router(wallet_router)
 app.include_router(rectify_money_router)
 app.include_router(save_money_router)
+app.include_router(access_money_router)
 app.include_router(log_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port)

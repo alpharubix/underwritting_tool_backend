@@ -20,8 +20,6 @@ try:
         "client_id": os.getenv("GCP_CLIENT_ID"),
         "token_uri": "https://oauth2.googleapis.com/token",  # hardcoded, never changes
     }
-    raw_key = os.getenv("PRIVATE_KEY", "")
-
 
     credentials = service_account.Credentials.from_service_account_info(credentials_info)
     gcs_client = storage.Client(credentials=credentials, project=credentials_info["project_id"])
