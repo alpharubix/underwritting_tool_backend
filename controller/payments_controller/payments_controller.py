@@ -393,7 +393,6 @@ async def get_user_pending_payments(request:Request,service:str):
             "amount":1,
             "payment_status":1,
             "wallet_status":1,
-            "created_at":1,
             "role":1
         }
 
@@ -407,9 +406,6 @@ async def get_user_pending_payments(request:Request,service:str):
         if pending_payments:
             is_pending_payment_found = True
 
-            dt = datetime.fromisoformat(pending_payments["created_at"])
-            india_time = dt.astimezone(ZoneInfo("Asia/Kolkata"))
-            pending_payments["created_at"]= india_time.strftime("%Y-%m-%d %H:%M:%S")
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
