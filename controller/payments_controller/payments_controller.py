@@ -10,8 +10,8 @@ from starlette import status
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 import json
-
 from config.config import RAZORPAY_CREATE_ORDERS_URL, AnchorRole, AllowedService, PaymentStatus, WalletStatus
+
 
 dotenv.load_dotenv()
 
@@ -363,24 +363,51 @@ async def get_validate_payment(request: Request):
         )
 
 async def get_user_pending_payments(request:Request,service:str):
-    db = request.app.state.mongo_db
-    user_id = request.state.user_id
-    print(user_id)
-    projection = {
-        "_id":0,
-        "id":1,
-        "amount_due":1,
-        "service":1,
-        "amount":1,
-        "payment_status":1,
-        "wallet_status":1
-    }
+    try:
+        
+        db = request.app.state.mongo_db
+        user_id = request.state.user_id
+        role = request.state.role
+        is_pending_payment_found = False
 
-    conditions = {
-        "user_id":user_id,
-        "payment_status":PaymentStatus.PENDING.value,
-        "service":service
-    }
-    pending_payments = await db.orders.find(conditions,projection).to_list(length=None)
+        input_body = await request.json()
 
-    return pending_payments
+        cust_id = input_body.get("cust_id")
+
+
+        if role in (AnchorRole.ANCHOR.value,AnchorRole.SUPER_ANCHOR.value):
+            if cust_id:
+                user_id = cust_id
+            else:
+                return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"cust_id is required","data":None})
+
+        projection = {
+            "_id":0,
+            "id":1,
+            "amount_due":1,
+            "service":1,
+            "amount":1,
+            "payment_status":1,
+            "wallet_status":1
+        }
+
+        conditions = {
+            "user_id":user_id,
+            "payment_status":PaymentStatus.PENDING.value,
+            "service":service
+        }
+        pending_payments = await db.orders.find_one(conditions,projection)
+
+        if pending_payments:
+            is_pending_payment_found = True
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"message":"Pending order retrieved successfully","data":{"pending_order":pending_payments,"is_pending_payment_found":is_pending_payment_found}},
+        )
+    except json.JSONDecodeError:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid json body","data":None})
+
+    except Exception as e:
+        print(e)
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error"})

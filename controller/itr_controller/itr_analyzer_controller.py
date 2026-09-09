@@ -122,29 +122,29 @@ async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
                             session=session
                         )
 
-                if requester_role in ALLOWED_ROLES:
-                    reserve_result = await reserve_service_balance(
-                        request=request,
-                        user_id=user_id,
-                        service=AllowedService.ITR.value,
-                        amount=ServicePrice.ITR.value,
-                        reference_id=reference_id,
+                reserve_result = await reserve_service_balance(
+                    request=request,
+                    user_id=user_id,
+                    service=AllowedService.ITR.value,
+                    amount=ServicePrice.ITR.value,
+                    reference_id=reference_id,
+                )
+
+                if not reserve_result.get("success"):
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail={"message": reserve_result.get("message")},
                     )
 
-                    if not reserve_result.get("success"):
-                        raise HTTPException(
-                            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                            detail={"message": reserve_result.get("message")},
-                        )
-
-                    await create_service_request(
-                        database=database,
-                        user_id=user_id,
-                        requested_by=request.state.user_id,
-                        service=AllowedService.ITR.value,
-                        amount=ServicePrice.ITR.value,
-                        reference_id=reference_id,
-                    )
+                await create_service_request(
+                    database=database,
+                    user_id=user_id,
+                    requested_by=request.state.user_id,
+                    requested_by_role=requester_role,
+                    service=AllowedService.ITR.value,
+                    amount=ServicePrice.ITR.value,
+                    reference_id=reference_id,
+                )
 
             except HTTPException as e:
                 raise e
