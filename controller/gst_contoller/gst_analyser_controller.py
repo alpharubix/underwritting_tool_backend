@@ -623,36 +623,37 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
 
             await gst_reference_coll.insert_one(gst_reference_doc)
 
-            if requester_role in ALLOWED_ROLES:
-                reserve_result = await reserve_service_balance(
-                    request=request,
-                    user_id=user_id,
-                    service=AllowedService.GST.value,
-                    amount=ServicePrice.GST.value,
-                    reference_id=reference_id,
+
+            reserve_result = await reserve_service_balance(
+                request=request,
+                user_id=user_id,
+                service=AllowedService.GST.value,
+                amount=ServicePrice.GST.value,
+                reference_id=reference_id,
+            )
+
+            if not reserve_result.get("success"):
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail={"message": reserve_result.get("message")},
                 )
 
-                if not reserve_result.get("success"):
-                    raise HTTPException(
-                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                        detail={"message": reserve_result.get("message")},
-                    )
-
-                await create_service_request(
-                    database=database,
-                    user_id=user_id,
-                    requested_by=request.state.user_id,
-                    service=AllowedService.GST.value,
-                    amount=ServicePrice.GST.value,
-                    reference_id=reference_id,
-                )
-                print("Reserved amount for Gst",reserve_result)
+            await create_service_request(
+                database=database,
+                user_id=user_id,
+                requested_by=request.state.user_id,
+                requested_by_role=requester_role,
+                service=AllowedService.GST.value,
+                amount=ServicePrice.GST.value,
+                reference_id=reference_id,
+            )
+            print("Reserved amount for Gst",reserve_result)
 
 
             return JSONResponse(status_code=202,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":reference_id}})
 
         else:
-            raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
+         raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
 
 
 

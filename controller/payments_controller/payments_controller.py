@@ -362,13 +362,17 @@ async def get_validate_payment(request: Request):
             },
         )
 
-async def get_user_pending_payments(request:Request,service:str,cust_id:str):
+async def get_user_pending_payments(request:Request,service:str):
     try:
         
         db = request.app.state.mongo_db
         user_id = request.state.user_id
         role = request.state.role
         is_pending_payment_found = False
+
+        input_body = await request.json()
+
+        cust_id = input_body.get("cust_id")
 
 
         if role in (AnchorRole.ANCHOR.value,AnchorRole.SUPER_ANCHOR.value):
@@ -401,6 +405,9 @@ async def get_user_pending_payments(request:Request,service:str,cust_id:str):
             status_code=status.HTTP_200_OK,
             content={"message":"Pending order retrieved successfully","data":{"pending_order":pending_payments,"is_pending_payment_found":is_pending_payment_found}},
         )
+    except json.JSONDecodeError:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid json body","data":None})
+
     except Exception as e:
         print(e)
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,content={"message":"Internal server error"})
