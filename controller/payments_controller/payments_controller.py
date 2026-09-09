@@ -3,6 +3,8 @@ import hmac
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
 import dotenv
 import httpx
 import math
@@ -67,6 +69,7 @@ async def get_create_order(request: Request):
                 # Internal references
                 "user_id": user_id,
                 "service": service,
+                "role":user_role,
 
                 # Payment tracking
                 "payment_status":PaymentStatus.PENDING.value,
@@ -384,11 +387,14 @@ async def get_user_pending_payments(request:Request,service:str):
         projection = {
             "_id":0,
             "id":1,
+            "notes.user_id":1,
             "amount_due":1,
             "service":1,
             "amount":1,
             "payment_status":1,
-            "wallet_status":1
+            "wallet_status":1,
+            "created_at":1,
+            "role":1
         }
 
         conditions = {
@@ -400,6 +406,10 @@ async def get_user_pending_payments(request:Request,service:str):
 
         if pending_payments:
             is_pending_payment_found = True
+
+            dt = datetime.fromisoformat(pending_payments["created_at"])
+            india_time = dt.astimezone(ZoneInfo("Asia/Kolkata"))
+            pending_payments["created_at"]= india_time.strftime("%Y-%m-%d %H:%M:%S")
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
