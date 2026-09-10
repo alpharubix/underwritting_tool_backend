@@ -3,16 +3,13 @@ import hmac
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
-
 import dotenv
 import httpx
-import math
 from starlette import status
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 import json
-from config.config import RAZORPAY_CREATE_ORDERS_URL, AnchorRole, AllowedService, PaymentStatus, WalletStatus
+from config.config import RAZORPAY_CREATE_ORDERS_URL, AnchorRole, PaymentStatus, WalletStatus,ServicePrice
 
 
 dotenv.load_dotenv()
@@ -22,7 +19,7 @@ async def get_create_order(request: Request):
         input_body = await request.json()
         amount = input_body.get("amount")
         currency = input_body.get("currency")
-        service = input_body.get("service")
+        services_breakup = input_body.get("services_breakup")
         user_role = request.state.role
         user_id =  request.state.user_id
 
@@ -31,11 +28,8 @@ async def get_create_order(request: Request):
             if not input_body.get("user_id") : #guard condition for anchor access levels
                 return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"message":"user id is required","data":None})
             user_id = input_body.get("user_id")
-        if amount is None or not currency or not service:
+        if amount is None or not currency or not services_breakup:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"message":"Incorrect payload","data":None})
-
-        if service not in (AllowedService.BSA.value, AllowedService.GST.value, AllowedService.ITR.value,AllowedService.CIBIL.value):
-            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"message":"Service not supported","data":None})
 
         url = RAZORPAY_CREATE_ORDERS_URL
 
@@ -47,7 +41,7 @@ async def get_create_order(request: Request):
             "receipt": receipt,
             "notes":{
                 "user_id": user_id,
-                "service": service
+                "services_breakup": services_breakup,
             }
         }
 
@@ -68,7 +62,6 @@ async def get_create_order(request: Request):
 
                 # Internal references
                 "user_id": user_id,
-                "service": service,
                 "role":user_role,
 
                 # Payment tracking
@@ -83,7 +76,7 @@ async def get_create_order(request: Request):
             }
 
             orders_response =  await request.app.state.mongo_db["orders"].insert_one(order_document)
-            return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message":"order created","data":{"user_id":user_id,"order_id":razor_pay_order.get("id"),"amount":razor_pay_order.get("amount"),"currency":razor_pay_order.get("currency"),"service":service}})
+            return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message":"order created","data":{"user_id":user_id,"order_id":razor_pay_order.get("id"),"amount":razor_pay_order.get("amount"),"currency":razor_pay_order.get("currency"),"service_breakup":services_breakup}})
         else:
             return JSONResponse(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"message":"service unavailable","data":None})
     except json.JSONDecodeError as e:
@@ -238,10 +231,10 @@ async def get_validate_payment(request: Request):
                 now = datetime.now(timezone.utc)
 
                 # -----------------------------------------
-                # 6.2 Get service
+                # 6.2 Get services break-up
                 # -----------------------------------------
 
-                service = order_document.get("service")
+                service_breakup = order_document.get("notes").get("services_breakup")
                 amount = order_document.get("amount")
 
                 # -----------------------------------------
@@ -254,7 +247,7 @@ async def get_validate_payment(request: Request):
                     "razorpay_signature": razorpay_signature,
 
                     "user_id": user_id,
-                    "service": service,
+                    "service_breakup": service_breakup,
 
                     "amount": amount,
                     "currency": order_document["currency"],
@@ -297,45 +290,54 @@ async def get_validate_payment(request: Request):
                 # 6.5 Atomic wallet credit
                 # -----------------------------------------
 
-                await wallets_collection.update_one(
-                    {
-                        "user_id": user_id,
-                        "service": service,
-                    },
-                    {
-                        "$inc": {
-                            "available_balance": math.ceil(amount/ 100),
-                        },
-                        "$set": {
-                            "updated_at": now,
-                        },
-                        "$setOnInsert": {
+                #service wise payment split
+                for service in service_breakup:
+                    print("service", service)
+                    service_name =  service.get("service")
+                    quantity = service.get("qty")
+                    print(service_name, quantity)
+
+                    calculated_credit_per_service = (quantity * getattr(ServicePrice, service_name).value)
+
+                    await wallets_collection.update_one(
+                        {
                             "user_id": user_id,
-                            "service": service,
-                            "reserved_balance": 0,
-                            "created_at": now,
+                            "service": service_name,
                         },
-                    },
-                    upsert=True,
-                    session=session,
-                )
-
-                # -----------------------------------------
-                # 6.6 Mark wallet as credited
-                # -----------------------------------------
-
-                await payments_collection.update_one(
-                    {
-                        "razorpay_payment_id": razorpay_payment_id,
-                    },
-                    {
-                        "$set": {
-                            "wallet_status":WalletStatus.SUCCESS.value,
-                            "updated_at": now,
+                        {
+                            "$inc": {
+                                "available_balance":calculated_credit_per_service,
+                            },
+                            "$set": {
+                                "updated_at": now,
+                            },
+                            "$setOnInsert": {
+                                "user_id": user_id,
+                                "service": service_name,
+                                "reserved_balance": 0,
+                                "created_at": now,
+                            },
                         },
-                    },
-                    session=session,
-                )
+                        upsert=True,
+                        session=session,
+                    )
+
+                    # -----------------------------------------
+                    # 6.6 Mark wallet as credited
+                    # -----------------------------------------
+
+                    await payments_collection.update_one(
+                        {
+                            "razorpay_payment_id": razorpay_payment_id,
+                        },
+                        {
+                            "$set": {
+                                "wallet_status":WalletStatus.SUCCESS.value,
+                                "updated_at": now,
+                            },
+                        },
+                        session=session,
+                    )
 
         # -----------------------------------------
         # 7. Success
