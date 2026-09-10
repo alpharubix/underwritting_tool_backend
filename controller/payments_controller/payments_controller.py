@@ -37,7 +37,7 @@ async def get_create_order(request: Request):
         receipt = str(uuid.uuid4())
 
         payload = {
-            "amount": amount,
+            "amount": amount*100,
             "currency": currency,
             "receipt": receipt,
             "notes":{
