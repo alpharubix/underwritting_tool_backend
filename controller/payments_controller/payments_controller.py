@@ -31,12 +31,17 @@ async def get_create_order(request: Request):
         if amount is None or not currency or not services_breakup:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"message":"Incorrect payload","data":None})
 
+        # The frontend sends the amount in rupees. Razorpay requires integer paise.
+        razorpay_amount = int(round(float(amount) * 100))
+        if razorpay_amount <= 0:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"message":"Amount must be greater than zero","data":None})
+
         url = RAZORPAY_CREATE_ORDERS_URL
 
         receipt = str(uuid.uuid4())
 
         payload = {
-            "amount": amount*100,
+            "amount": razorpay_amount,
             "currency": currency,
             "receipt": receipt,
             "notes":{
