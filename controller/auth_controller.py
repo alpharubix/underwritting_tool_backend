@@ -1016,7 +1016,8 @@ async def create_super_anchor(request: Request):
     body = await request.json()
 
     password = body.get("password")
-
+    anchor_code = body.get("anchor_code")
+    anchor_name=body.get("anchor_name")
     result, message = is_password_valid(password)
 
     if not result:
@@ -1052,6 +1053,8 @@ async def create_super_anchor(request: Request):
                     {
                         "login_id": login_id,
                         "password": hashed_password,
+                        "anchor_code":anchor_code,
+                        "anchor_name":anchor_name,
                         "role": "SUPER_ANCHOR"
                     },
                     session=session
