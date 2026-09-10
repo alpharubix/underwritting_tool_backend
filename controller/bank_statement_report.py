@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from starlette import status
 from starlette.responses import JSONResponse
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -623,3 +624,24 @@ async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
     except Exception as e:
         print("Error happend at get_report_date_range controller",e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error"})
+
+
+async def get_banK_accounts(request,cust_id):
+    try:
+        user_id = request.state.user_id
+        db = request.app.state.db
+
+        doc = await db.bsa_merged_bankstatements.find({"user_id":user_id,},{"_id":1,"account_details.Bank Name":1,"account_details.Account Number":1,"account_details.period":1,"account_details.Account Type":1})
+
+        for doc in doc:
+            doc["_id"] = str(doc["_id"])
+
+        if not doc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"message": "No Bank Account found for this user"})
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"data":doc})
+
+    except Exception as e:
+        print("Error happend at get_report_date_range controller", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail={"message": "Internal server error"})
+
