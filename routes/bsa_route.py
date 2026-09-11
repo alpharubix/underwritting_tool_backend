@@ -19,7 +19,7 @@ from controller.cashflow_controller import r1xcrm_build_cashflow_report
 from controller.overview_month_wise import r1xcrm_bank_statement_report_consolidated
 from services.service_request_service import get_service_request,update_service_request
 from controller.payments_controller.wallet_contoller import consume_reserved_balance
-from controller.bank_statement_report import get_banK_accounts
+from controller.bank_statement_report import get_available_bank_accounts
 import json
 from datetime import datetime
 
@@ -493,4 +493,4 @@ async def r1xcrm_bsa_report(request: Request, acc_id: int, from_date: Optional[s
 
 @bsa_router.get("/bank-accounts")
 async def bank_report(request: Request,cust_id:Optional[str]=Query(None)):
-    return get_banK_accounts(request,cust_id)
+    return await get_available_bank_accounts(request,cust_id)
