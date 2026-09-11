@@ -368,7 +368,7 @@ async def get_validate_payment(request: Request):
             },
         )
 
-async def get_user_pending_payments(request:Request,service:str):
+async def get_user_pending_payments(request:Request):
     try:
         
         db = request.app.state.mongo_db
@@ -391,6 +391,7 @@ async def get_user_pending_payments(request:Request,service:str):
             "_id":0,
             "id":1,
             "notes.user_id":1,
+            "notes.services_breakup":1,
             "amount_due":1,
             "service":1,
             "amount":1,
@@ -402,7 +403,7 @@ async def get_user_pending_payments(request:Request,service:str):
         conditions = {
             "user_id":user_id,
             "payment_status":PaymentStatus.PENDING.value,
-            "service":service
+            "role":{"$in":[AnchorRole.ANCHOR.value,AnchorRole.SUPER_ANCHOR.value]},
         }
         pending_payments = await db.orders.find_one(conditions,projection)
 
