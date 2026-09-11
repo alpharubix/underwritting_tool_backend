@@ -14,5 +14,5 @@ async def validate_payment(request: Request):
     return await get_validate_payment(request)
 
 @payments_router.post("/pending")
-async def get_user_pending_payments_route(request:Request,service:str):
-    return await get_user_pending_payments(request,service)
+async def get_user_pending_payments_route(request:Request):
+    return await get_user_pending_payments(request)
