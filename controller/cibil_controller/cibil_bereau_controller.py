@@ -292,8 +292,8 @@ async def validate_cibil_otp(request,cust_id):
             reserve_result = await reserve_service_balance(
                 request=request,
                 user_id=user_id,
-                service=AllowedService.ITR.value,
-                amount=ServicePrice.ITR.value,
+                service=AllowedService.CIBIL.value,
+                amount=ServicePrice.CIBIL.value,
                 reference_id=reference_id,
             )
 
@@ -308,8 +308,8 @@ async def validate_cibil_otp(request,cust_id):
                 user_id=user_id,
                 requested_by=request.state.user_id,
                 requested_by_role=requester_role,
-                service=AllowedService.ITR.value,
-                amount=ServicePrice.ITR.value,
+                service=AllowedService.CIBIL.value,
+                amount=ServicePrice.CIBIL.value,
                 reference_id=reference_id,
             )
 
