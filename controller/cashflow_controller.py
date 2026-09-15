@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from dateutil.relativedelta import relativedelta
+from starlette import status
 
 logger = logging.getLogger(__name__)
 
@@ -413,145 +414,186 @@ async def build_cashflow_report_oldVersion(db, user_id: str, from_month: str, to
 
 #OPTIMIZED VERSION OF THE CASHFLOW REPORT GENERATION FUNCTION
 
-async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str):
+async def build_cashflow_report(db,request):
     # 1. Input Validation
-    logger.info(f"Building cashflow report for user_id={user_id} from={from_month} to={to_month}")
-    if not user_id or len(user_id.strip()) < 5:
-        raise HTTPException(status_code=400, detail="Invalid user_id")
-    
-    from_dt_raw = parse_any_month(from_month)
-    to_dt_raw = parse_any_month(to_month)
 
-    if not from_dt_raw or not to_dt_raw:
+    input_body = await request.json()
+
+    from_month = input_body.get("from_date")
+    to_month = input_body.get("to_date")
+    account_number = input_body.get("account_number")
+
+    if not from_month or not to_month or not account_number:
         raise HTTPException(
-            status_code=400, 
-            detail="Invalid month format. Use YYYY-MM, MMM-YYYY, or MM-YYYY"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "from_date, to_date, account_number is required"
+            }
         )
+    logger.info(f"Building cashflow report for account={account_number} from={from_month} to={to_month}")
 
-    from_dt, to_dt = normalize_date_range(from_dt_raw, to_dt_raw)
-    logger.debug(f"Normalized range: {from_dt} to {to_dt}")
+    from_dt = datetime.strptime(
+        from_month,
+        "%Y-%m-%d"
+    ).replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+        tzinfo=timezone.utc
+    )
+
+    to_dt = datetime.strptime(
+        to_month,
+        "%Y-%m-%d"
+    ).replace(
+        hour=23,
+        minute=59,
+        second=59,
+        microsecond=999999,
+        tzinfo=timezone.utc)
+
+
+    logger.info(f"Normalized range: {from_dt} to {to_dt}")
     
     if from_dt > to_dt:
         raise HTTPException(status_code=400, detail="from_month cannot be after to_month")
 
-    # 2. Fetch documents from MongoDB
-    query_start = from_dt.replace(tzinfo=timezone.utc)
-    query_end = (to_dt + relativedelta(months=1)).replace(tzinfo=timezone.utc)
 
     query = {
-        "user_id": user_id,
-        "from_date": {"$lt": query_end},
-        "to_date": {"$gte": query_start},
+        "account_details.Account Number": account_number,
     }
 
     print(query)
-    
+
     pipeline = [
-    # ---------------------------------------------------------
-    # Stage 1
-    # Match only the required bank statement document.
-    #
-    # This is identical to the previous implementation.
-    # MongoDB still uses the user_id/from_date/to_date filter.
-    # ---------------------------------------------------------
-    {
-        "$match": query
-    },
+        # Stage 1: Match documents
+        {
+            "$match": query
+        },
 
-    # ---------------------------------------------------------
-    # Stage 2
-    #
-    # Project ONLY the fields required by this API.
-    #
-    # Instead of returning the entire analysis_metadata object,
-    # return only the Cash Flow array.
-    # ---------------------------------------------------------
-    {
-        "$project": {
-            "_id": 0,
-            "user_id": 1,
-            "created_at": 1,
-            "from_date": 1,
-            "to_date": 1,
-            "CashFlow": {
-                "$ifNull": [
-                    "$analysis_metadata.Data.Cash Flow",
-                    []
-                ]
+        # Stage 2: Project and extract the correct CashFlow data
+        {
+            "$project": {
+                "_id": 0,
+                "account_details": 1,
+                "merged_reference_id": 1,
+                "user_id": 1,
+                "created_at": 1,
+                "from_date": 1,
+                "to_date": 1,
+
+                "OverView": {
+                    "$cond": [
+                        {"$isArray": "$analysis_metadata.Data.OverView"},
+                        "$analysis_metadata.Data.OverView",
+                        []
+                    ]
+                },
+
+                # Get CashFlow from the correct nested location
+                "CashFlow": {
+                    "$cond": [
+                        {"$isArray": "$analysis_metadata.Data.'Cash Flow'"},
+                        "$analysis_metadata.Data.'Cash Flow'",
+                        []
+                    ]
+                },
+
+                # Also get the Summary data (has parsedMonthDate for filtering)
+                "SummaryDebitCredit": {
+                    "$cond": [
+                        {"$isArray": "$analysis_metadata.Data.'Summary Of Debit And Credit'"},
+                        "$analysis_metadata.Data.'Summary Of Debit And Credit'",
+                        []
+                    ]
+                }
             }
-        }
-    },
+        },
 
-    # ---------------------------------------------------------
-    # Stage 3
-    #
-    # Filter monthly entries INSIDE MongoDB.
-    #
-    # Previously:
-    #
-    # MongoDB returned every month.
-    #
-    # Python filtered them.
-    #
-    # Now:
-    #
-    # MongoDB returns only requested months.
-    # ---------------------------------------------------------
-    {
-        "$project": {
-            "user_id": 1,
-            "created_at": 1,
-            "from_date": 1,
-            "to_date": 1,
+        # Stage 3: Filter by date - CORRECTED
+        {
+            "$project": {
+                "user_id": 1,
+                "created_at": 1,
+                "from_date": 1,
+                "to_date": 1,
+                "account_details": 1,
+                "merged_reference_id": 1,
+                "OverView": 1,
 
-            "CashFlow": {
-                "$filter": {
-                    "input": "$CashFlow",
-                    "as": "row",
-                    "cond": {
-                        "$and": [
-                            {
-                                "$gte": [
-                                    "$$row.parsedMonthDate",
-                                    from_dt
-                                ]
-                            },
-                            {
-                                "$lte": [
-                                    "$$row.parsedMonthDate",
-                                    to_dt
-                                ]
+                # Use $getField for fields with spaces in the name
+                "CashFlow": {
+                    "$filter": {
+                        "input": {
+                            "$getField": {
+                                "field": "Summary Of Debit And Credit",
+                                "input": "$analysis_metadata.Data"
                             }
-                        ]
+                        },
+                        "as": "row",
+                        "cond": {
+                            "$and": [
+                                {
+                                    "$gte": ["$$row.parsedMonthDate", from_dt]
+                                },
+                                {
+                                    "$lte": ["$$row.parsedMonthDate", to_dt]
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+
+        # Stage 4: Remove None values
+        {
+            "$project": {
+                "user_id": 1,
+                "created_at": 1,
+                "from_date": 1,
+                "to_date": 1,
+                "account_details": 1,
+                "merged_reference_id": 1,
+                "OverView": 1,
+                "CashFlow": {
+                    "$filter": {
+                        "input": "$CashFlow",
+                        "as": "cf",
+                        "cond": {"$ne": ["$$cf", None]}
                     }
                 }
             }
         }
-    }
-]
-
-    # Sort by created_at to ensure consistent latest-wins logic
+    ]
     docs = await (
         db["bsa_merged_bankstatements"]
         .aggregate(pipeline)
         .to_list(length=None)
     )
-    print(f"Fetched {len(docs)} documents from MongoDB for user_id={user_id}")
-    logger.info(f"Fetched {len(docs)} documents from MongoDB for user_id={user_id}")
+
+    print(f"Fetched {len(docs)} documents")
 
     if docs:
-        print(docs[0].keys())
+        doc = docs[0]
+        cash_flow_unfiltered = doc.get("CashFlow_unfiltered") or []
+        cash_flow_filtered = doc.get("CashFlow") or []
 
-        print("CashFlow Length:", len(docs[0]["CashFlow"]))
+        print(f"CashFlow (before filter): {len(cash_flow_unfiltered)} entries")
+        print(f"CashFlow (after filter):  {len(cash_flow_filtered)} entries")
 
-        if docs[0]["CashFlow"]:
-            print(docs[0]["CashFlow"][0])
+        # Print filter parameters
+        print(f"Filter date range: {from_dt} to {to_dt}")
 
-    print("=" * 80)
-
-    if not docs:
-        logger.warning(f"No documents found in DB for user_id={user_id} in range {from_dt} to {to_dt}")
-        raise HTTPException(status_code=404, detail="No bank statements found for this range")
+        # Print sample raw entries to see what parsedMonthDate looks like
+        if cash_flow_unfiltered:
+            print("\nFirst 3 CashFlow entries (raw):")
+            for i, entry in enumerate(cash_flow_unfiltered[:3]):
+                parsed_date = entry.get("parsedMonthDate")
+                print(f"  [{i}] parsedMonthDate: {parsed_date} (type: {type(parsed_date).__name__})")
+                print(f"       Full entry keys: {entry.keys()}")
 
     # 3. Extract & Filter (Latest Upload Wins per month)
     final_monthly_map: dict[str, tuple[dict, datetime]] = {}
@@ -796,6 +838,7 @@ async def build_cashflow_report(db, user_id: str, from_month: str, to_month: str
     return {
         "status": "success",
         "data":{
+            "account_details":account_details,
             "summary": {
                                 # ── Phase 1: Top-level P&L ───────────────────────────────
                 "total_inflows_percent": f(total_inflows_pct),

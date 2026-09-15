@@ -20,6 +20,7 @@ from controller.overview_month_wise import r1xcrm_bank_statement_report_consolid
 from services.service_request_service import get_service_request,update_service_request
 from controller.payments_controller.wallet_contoller import consume_reserved_balance
 from controller.bank_statement_report import get_available_bank_accounts
+from controller.individual_bank_statement_report import individual_overview_by_account,individual_eod_by_account,individual_loan_transaction_by_account
 import json
 from datetime import datetime
 
@@ -183,23 +184,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail={"message":"Internal server error"})
 
 
-@bsa_router.get("/month-wise-overview")
-async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),cust_id :Optional[str]=None):
+@bsa_router.post("/month-wise-overview")
+async def bsa_report(request:Request):
     db = request.app.state.mongo_db
-    user_id = request.state.user_id
 
-    requester_role = request.state.role
-
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-            )
-        user_id = cust_id
-
-    success_data = await bank_statement_report_consolidated(db, user_id,from_date,to_date)
+    success_data = await bank_statement_report_consolidated(db,request)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     
@@ -208,48 +197,11 @@ async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
         "data": success_data
     }
 
-@bsa_router.get("/summary-of-debit-and-credit_monthwise")
-async def bsa_summary_of_debit_and_credit(request:Request,from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),cust_id :Optional[str]=None):
-    
-    print(from_date,to_date)
+@bsa_router.post("/summary-of-debit-and-credit_monthwise")
+async def bsa_summary_of_debit_and_credit(request:Request):
+
     db=request.app.state.mongo_db
-    user_id=request.state.user_id
-    if not from_date or not to_date:
-        raise HTTPException(
-            status_code=400,
-            detail="from_date and to_date are required query parameters"
-        )
-    requester_role = request.state.role
-
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-            )
-
-        user_id = cust_id
-    try:
-        from_dt = datetime.strptime(from_date, "%Y-%m-%d")                          # 2025-04-01 00:00:00
-        to_dt   = datetime.strptime(to_date,   "%Y-%m-%d").replace(hour=23, minute=59, second=59)  # 2025-05-31 23:59:59
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
-    if from_dt > to_dt:
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "from_date must be earlier than or equal to to_date"}
-        )
-    
-    delta = to_dt - from_dt
-    if delta.days > 730:
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "Date range cannot exceed 2 years"}
-        )
-    
-    success_data=await bsa_summary_of_debit_credit_monthwise(db,user_id,from_dt,to_dt)
+    success_data=await bsa_summary_of_debit_credit_monthwise(db,request)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     return {
@@ -321,30 +273,37 @@ async def crm_bsa_statement_report(request:Request,acc_id:str):
         )
 
 
-@bsa_router.get("/cashflow")
+@bsa_router.post("/cashflow")
 async def cashflow_report(
     request:    Request,
-    from_month: str = Query(..., description="Start month in YYYY-MM format, e.g. 2024-01"),
-    to_month:   str = Query(..., description="End month in YYYY-MM format, e.g. 2024-12"),
-    cust_id:Optional[str]=None
 ):
     db=request.app.state.mongo_db
-    user_id=request.state.user_id
-    requester_role = request.state.role
 
 
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Since the role is on behalf of the user, cust_id is required")
-        user_id = cust_id
-
-
-    result = await build_cashflow_report(db, user_id, from_month, to_month)
+    result = await build_cashflow_report(db,request)
 
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result)
  
     return result
+
+@bsa_router.post("/individual/overview")
+async def individual_overview_report(
+    request: Request,
+):
+    return await individual_overview_by_account(db=request.app.state.mongo_db,request=request)
+
+@bsa_router.post("/individual/eod-analysis")
+async def individual_eod_analysis_report(
+    request: Request,
+):
+    return await individual_eod_by_account(db=request.app.state.mongo_db,request=request)
+
+@bsa_router.post("/individual/loan-transactions")
+async def individual_loan_transactions_report(
+    request: Request,
+):
+    return await individual_loan_transaction_by_account(request=request,db=request.app.state.mongo_db)
 
 @bsa_router.get("/get-bank-names")
 async def bsa_get_bank_names():
@@ -359,18 +318,11 @@ async def bsa_get_bank_names():
             detail={"message": "Internal server error please contact the admin for support."}
         )
 
-@bsa_router.get("/report-date-range")
+@bsa_router.post("/report-date-range")
 async def report_date_range(
-    request: Request,cust_id:Optional[str]=None):
-    user_id = request.state.user_id
+    request: Request):
     try:
-        requester_role = request.state.role
-        if requester_role in ALLOWED_ROLES:
-            user_id = cust_id
-        if requester_role in ALLOWED_ROLES and cust_id==None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Since the role is on behalf of the user, cust_id is required")
-
-        return await get_report_date_range(user_id=user_id,db=request.app.state.mongo_db)
+        return await get_report_date_range(request=request,db=request.app.state.mongo_db)
     except HTTPException as e:
        raise e
 
