@@ -759,7 +759,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,request):
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":1,
                     "summary": {
                         "$filter": {
                             "input": {
@@ -869,7 +868,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,request):
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":"$account_details",
                     "month": "$summary.month",
                     "parsedMonthDate": "$summary.parsedMonthDate",
                     "cash_deposit": {
@@ -971,7 +969,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,request):
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":"$account_details",
                     "month": 1,
                     "parsedMonthDate": 1,
                     "mw_inflow_val": {
@@ -1104,7 +1101,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,request):
             {
                 "$project": {
                     "_id": 1,
-                    "account_details":"$account_details",
                     "monthly_breakdown": {
                         "$map": {
                             "input": "$monthly_breakdown",
@@ -1185,7 +1181,7 @@ async def bsa_summary_of_debit_credit_monthwise(db,request):
             account_number, pipeline_end - pipeline_start, len(result)
         )
         if not result:
-            logger.warning("bank_Statement_Report aggregation | user_id=%s | Message:no data found after aggregation ",user_id)
+            logger.warning("bank_Statement_Report aggregation | account_number=%s | Message:no data found after aggregation ",account_number)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"message":"No summary data found for this user in the given date range"})
 
         total_time = time.perf_counter() - start_time

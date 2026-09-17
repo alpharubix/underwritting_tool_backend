@@ -3,11 +3,12 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus
-from controller.bsa_uploads import  bank_names, pdf_date_parser,pdf_upload_consumer
+from starlette.responses import JSONResponse
+from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus,AnchorRole
+from controller.bsa_uploads import  bank_names,pdf_upload_consumer_v2
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
-from controller.bank_statement_report import bank_statement_report, get_crm_bank_statement_report, get_report_date_range
+from controller.bank_statement_report import get_crm_bank_statement_report, get_report_date_range
 from typing import List, Optional
 from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_reference_id_mergable, merge_reference_ids
 from controller.backgroud_task_controller import send_report_mail_based_on_request
@@ -46,8 +47,7 @@ async def upload_bsa(
                 detail={"message": "Input data is required"})
 
         data_params = json.loads(data)
-
-        response = await pdf_date_parser(files,data_params)
+        response = await pdf_upload_consumer_v2(request=request,files=files,mongodb_connection=request.app.state.mongo_db,data_params=data_params,background_task=background_tasks)
     except JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -59,22 +59,22 @@ async def upload_bsa(
         raise e
     return response
 
-@bsa_router.post("/upload_ref_id")
-async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks,cust_id:Optional[str]=None):
-    try:
-          input_data = await request.json()
-
-          return await pdf_upload_consumer(request=request,input_body=input_data,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks,cust_id=cust_id)
-
-    except JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message":"Invalid JSON Input"}
-        )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise e
+# @bsa_router.post("/upload_ref_id")
+# async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks,cust_id:Optional[str]=None):
+#     try:
+#           input_data = await request.json()
+#
+#           return await pdf_upload_consumer(request=request,input_body=input_data,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks,cust_id=cust_id)
+#
+#     except JSONDecodeError:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail={"message":"Invalid JSON Input"}
+#         )
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise e
 
 
 
@@ -446,3 +446,51 @@ async def r1xcrm_bsa_report(request: Request, acc_id: int, from_date: Optional[s
 @bsa_router.get("/bank-accounts")
 async def bank_report(request: Request,cust_id:Optional[str]=Query(None)):
     return await get_available_bank_accounts(request,cust_id)
+
+
+@bsa_router.post("/account-details")
+
+async def account_details(request: Request):
+    try:
+        db = request.app.state.mongo_db
+
+        input_body = await request.json()
+        account_number = input_body.get("account_number")
+
+
+
+        if not account_number:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Account number is required"
+                }
+            )
+
+        doc = await db.bsa_merged_bankstatements.find_one(
+            {
+                "account_details.Account Number": account_number
+            },
+            {
+                "_id": 0,
+                "account_details": 1
+            }
+        )
+
+        if not doc:
+            raise HTTPException(status_code=404, detail={"message":"Account not found for this user"})
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Account details fetched successfully",
+                "data": doc
+            }
+        )
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid JSON"} )
+
+
+    except Exception as e:
+        raise HTTPException(status_code=500,detail={"message":"Internal server error"})

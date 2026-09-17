@@ -11,6 +11,7 @@ def create_smtp_connection():
         smtp = smtplib.SMTP_SSL('smtp.zoho.in', 465, timeout=10)  # SMTP_SSL for port 465
         smtp.ehlo()
         app_password = os.getenv("EMAIL_APP_PASSWORD")
+        print("Password for SMTP server:", app_password)
         smtp.login("system@5pointcredit.com", app_password)
         print("SMTP connection created successfully.")
         return smtp

@@ -440,8 +440,7 @@ async def build_cashflow_report(db,request):
         hour=0,
         minute=0,
         second=0,
-        microsecond=0,
-        tzinfo=timezone.utc
+        microsecond=0
     )
 
     to_dt = datetime.strptime(
@@ -451,8 +450,7 @@ async def build_cashflow_report(db,request):
         hour=23,
         minute=59,
         second=59,
-        microsecond=999999,
-        tzinfo=timezone.utc)
+        microsecond=999999)
 
 
     logger.info(f"Normalized range: {from_dt} to {to_dt}")
@@ -467,17 +465,18 @@ async def build_cashflow_report(db,request):
 
     print(query)
 
+    query = {
+        "account_details.Account Number": account_number,
+    }
+
     pipeline = [
-        # Stage 1: Match documents
         {
             "$match": query
         },
 
-        # Stage 2: Project and extract the correct CashFlow data
         {
             "$project": {
                 "_id": 0,
-                "account_details": 1,
                 "merged_reference_id": 1,
                 "user_id": 1,
                 "created_at": 1,
@@ -492,54 +491,54 @@ async def build_cashflow_report(db,request):
                     ]
                 },
 
-                # Get CashFlow from the correct nested location
                 "CashFlow": {
                     "$cond": [
-                        {"$isArray": "$analysis_metadata.Data.'Cash Flow'"},
-                        "$analysis_metadata.Data.'Cash Flow'",
-                        []
-                    ]
-                },
-
-                # Also get the Summary data (has parsedMonthDate for filtering)
-                "SummaryDebitCredit": {
-                    "$cond": [
-                        {"$isArray": "$analysis_metadata.Data.'Summary Of Debit And Credit'"},
-                        "$analysis_metadata.Data.'Summary Of Debit And Credit'",
+                        {
+                            "$isArray": {
+                                "$getField": {
+                                    "field": "Cash Flow",
+                                    "input": "$analysis_metadata.Data"
+                                }
+                            }
+                        },
+                        {
+                            "$getField": {
+                                "field": "Cash Flow",
+                                "input": "$analysis_metadata.Data"
+                            }
+                        },
                         []
                     ]
                 }
             }
         },
 
-        # Stage 3: Filter by date - CORRECTED
         {
             "$project": {
                 "user_id": 1,
                 "created_at": 1,
                 "from_date": 1,
                 "to_date": 1,
-                "account_details": 1,
                 "merged_reference_id": 1,
                 "OverView": 1,
 
-                # Use $getField for fields with spaces in the name
                 "CashFlow": {
                     "$filter": {
-                        "input": {
-                            "$getField": {
-                                "field": "Summary Of Debit And Credit",
-                                "input": "$analysis_metadata.Data"
-                            }
-                        },
+                        "input": "$CashFlow",
                         "as": "row",
                         "cond": {
                             "$and": [
                                 {
-                                    "$gte": ["$$row.parsedMonthDate", from_dt]
+                                    "$gte": [
+                                        "$$row.parsedMonthDate",
+                                        from_dt
+                                    ]
                                 },
                                 {
-                                    "$lte": ["$$row.parsedMonthDate", to_dt]
+                                    "$lte": [
+                                        "$$row.parsedMonthDate",
+                                        to_dt
+                                    ]
                                 }
                             ]
                         }
@@ -548,21 +547,22 @@ async def build_cashflow_report(db,request):
             }
         },
 
-        # Stage 4: Remove None values
         {
             "$project": {
                 "user_id": 1,
                 "created_at": 1,
                 "from_date": 1,
                 "to_date": 1,
-                "account_details": 1,
                 "merged_reference_id": 1,
                 "OverView": 1,
+
                 "CashFlow": {
                     "$filter": {
                         "input": "$CashFlow",
                         "as": "cf",
-                        "cond": {"$ne": ["$$cf", None]}
+                        "cond": {
+                            "$ne": ["$$cf", None]
+                        }
                     }
                 }
             }
@@ -837,8 +837,8 @@ async def build_cashflow_report(db,request):
     # 5. Final Response
     return {
         "status": "success",
+        "message":"cashflow data fetched successfully",
         "data":{
-            "account_details":account_details,
             "summary": {
                                 # ── Phase 1: Top-level P&L ───────────────────────────────
                 "total_inflows_percent": f(total_inflows_pct),

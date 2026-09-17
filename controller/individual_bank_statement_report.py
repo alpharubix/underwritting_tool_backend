@@ -267,9 +267,12 @@ async def individual_overview_by_account(
         # 10. Response
         # ---------------------------------------------------------
         return {
-            "account_number": account_number,
+            "status":"success",
+            "message":"overview report fetched successfully",
+            "data":{
             "consolidated_overall_report": consolidated,
             "monthly_breakdown": cleaned_rows
+            }
         }
 
     except JSONDecodeError:
@@ -599,21 +602,15 @@ async def individual_eod_by_account(
         # =========================================================
 
         return {
-            "account_number": str(
-                account_number
-            ),
+            "status":"success",
+            "message":"Eod analysis fetched successfully",
 
-            "from_date": from_date,
-
-            "to_date": to_date,
-
-            "number_of_months": len(
-                monthly_rows
-            ),
+            "data":{
 
             "consolidated_eod": consolidated_eod,
 
             "monthly_breakdown": cleaned_monthly_rows,
+            }
         }
 
     # =============================================================
@@ -736,7 +733,8 @@ async def individual_loan_transaction_by_account(db,request):
             pipeline
         ).to_list(length=1)
 
-        return docs
+        return  {"status":"success",
+            "message":"Loan transaction data fetched successfully","data":docs}
     except JSONDecodeError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid input body"})
     except HTTPException:

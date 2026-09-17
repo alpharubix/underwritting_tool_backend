@@ -214,10 +214,9 @@ async def bank_names():
 
 
 
-async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_task):
+async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_task,data_params):
     try:
         required_fields = ["accountNumber", "entityType", "accountType", "bankCode"] #madatory input fields
-        data_params = await request.json()
 
         user_id = request.state.user_id
         requester_role = request.state.role
@@ -256,6 +255,9 @@ async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_tas
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail={"message":f"Only PDF files are allowed. Invalid files: {', '.join(invalid_files)}"}
             )
+
+        if not data_params.get("filePassword"): #remove the password if not provided by the user
+            data_params.pop("filePassword")
 
         scoreme_response, request_initiated_time = await upload_to_scoreme(files, data_params)
 
