@@ -1,4 +1,3 @@
-import dns
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncpg
 import dotenv

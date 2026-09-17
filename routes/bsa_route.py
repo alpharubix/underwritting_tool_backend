@@ -3,6 +3,8 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
+
+from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus
 from controller.bsa_uploads import  bank_names, pdf_date_parser,pdf_upload_consumer
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
@@ -16,6 +18,9 @@ from controller.overview_month_wise import bank_statement_report_consolidated
 from controller.bsa_summary_drcr_monthwise import get_r1xcrm_summary_of_debit_and_credit_monthwise
 from controller.cashflow_controller import r1xcrm_build_cashflow_report
 from controller.overview_month_wise import r1xcrm_bank_statement_report_consolidated
+from services.service_request_service import get_service_request,update_service_request
+from controller.payments_controller.wallet_contoller import consume_reserved_balance
+
 import json
 from datetime import datetime
 
@@ -137,6 +142,19 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
 
             existing_reference_id = existing_doc["last_merged_reference_id"]
             print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
+
+            #update the service request if any service request found for this reference_id
+            service_request = await get_service_request(database=request.app.state.mongo_db,filters={"reference_id":reference_id})
+
+            if service_request:
+                #consume the reserved amount for the user
+                amount_consumption_result = await consume_reserved_balance(database=request.app.state.mongo_db,service=AllowedService.BSA.value,user_id=user_id,reference_id=reference_id,amount=ServicePrice.BSA.value)
+                print("Reserved prince consumption",amount_consumption_result)
+                if amount_consumption_result.get("success"):
+                    #if reserved price consumption is successfull then update the service request status
+                    service_update = await update_service_request(database=request.app.state.mongo_db,reference_id=reference_id,fields={"wallet_status":WalletStatus.SUCCESS.value,"service_status":ServiceRequestStatus.SERVICE_STATUS_SUCCESS.value,"upstream_status": UpstreamStatus.UPSTREAM_STATUS_SUCCESS.value})
+                    print("Service update result",service_update)
+
             background_tasks.add_task(merge_reference_ids, user_id, [existing_reference_id, reference_id],
                                       mongodb_connection)
             return {"status": "success", "message": "Merge initiated"}
@@ -144,6 +162,25 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         elif merge_status == "NO_EXISTING_DOC":
             # First report for this user — store directly
             print(f"First report for user {user_id} — storing directly")
+            # update the service request if any service request found for this reference_id
+            service_request = await get_service_request(database=request.app.state.mongo_db,
+                                                  filters={"reference_id": reference_id})
+
+            if service_request:
+                # consume the reserved amount for the user
+                amount_consumption_result = await consume_reserved_balance(database=request.app.state.mongo_db,
+                                                                           service=AllowedService.BSA.value,
+                                                                           user_id=user_id, reference_id=reference_id,
+                                                                           amount=ServicePrice.BSA.value)
+                print("Reserved prince consumption", amount_consumption_result)
+                if amount_consumption_result.get("success"):
+                    # if reserved price consumption is successfull then update the service request status
+                    service_update = await update_service_request(database=request.app.state.mongo_db,
+                                                                  reference_id=reference_id,
+                                                                  fields={"wallet_status": WalletStatus.SUCCESS.value,
+                                                                          "service_status": ServiceRequestStatus.SERVICE_STATUS_SUCCESS.value,
+                                                                          "upstream_status": UpstreamStatus.UPSTREAM_STATUS_SUCCESS.value})
+                    print("Service update result", service_update)
             background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
             background_tasks.add_task(
                 send_report_mail_based_on_request, user_id, reference_id,
