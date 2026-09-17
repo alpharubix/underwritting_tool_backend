@@ -561,8 +561,6 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
                 user_id = cust_id
 
-            user_id=request.state.user_id
-
             input_data = await request.json()
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})
@@ -576,6 +574,11 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
         if not gstin or not from_month or not to_month:
            raise HTTPException(status_code=400, detail={"message": "gstin and from_month and to_month are required"})
 
+        # restrict the months to only 12 months
+        gst_month_validation_result = __gst_month_validator(from_gst=from_month, to_gst=to_month)
+
+        if not gst_month_validation_result.get("is_success"):
+            raise HTTPException(status_code=400,detail={"message": gst_month_validation_result.get("message")})
 
         async with AsyncClient() as client:
            try:
