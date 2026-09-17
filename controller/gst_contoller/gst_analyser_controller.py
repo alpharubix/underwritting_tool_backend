@@ -561,7 +561,6 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Cust ID not found !")
                 user_id = cust_id
 
-
             input_data = await request.json()
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail={"message": "Invalid JSON format in request body"})
@@ -720,6 +719,7 @@ async def get_all_user_ref_ids(request: Request,cust_id:str,is_crm:bool = False)
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
 
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
+
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
 
         if not docs:
