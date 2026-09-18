@@ -2,6 +2,7 @@ from collections import defaultdict
 import logging
 import time
 from fastapi import HTTPException
+from fastapi.openapi import docs
 from starlette import status
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -307,9 +308,22 @@ async def get_crm_bank_statement_report(db, acc_id: int):
 ########################################################
 
 
-async def bank_statement_report_consolidated(db, user_id: str, from_date: str = None, to_date: str = None):
-    logger.info("bank_statement_report.start | user_id=%s", user_id)
-    start_time = time.perf_counter()
+async def bank_statement_report_consolidated(db,request):
+    logger.info("bank_statement_report.start ")
+
+    input_body = await request.json()
+
+    from_date = input_body.get("from_date")
+    to_date = input_body.get("to_date")
+    account_number = input_body.get("account_number")
+
+    if not from_date or not to_date or not account_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "from_date, to_date, account_number is required"
+            }
+        )
 
     from_dt = (
     datetime.strptime(from_date, "%Y-%m-%d")
@@ -349,33 +363,68 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     # Optimized flow: $match(user_id) -> $project(required fields) ->
     # $filter(parsedMonthDate) -> only the required months ever leave Mongo.
     pipeline = [
-        {"$match": {"user_id": str(user_id)}},
-        {"$project": {
-            "_id": 0,
-            "merged_reference_id": 1,
-            "OverView": {"$ifNull": ["$analysis_metadata.Data.OverView", []]},
-        }},
         {
-            "$addFields": {
-            # Count BEFORE filtering, so we can still tell "no overview data
-            # at all" apart from "no rows in the requested date range".
-            "OverViewCount": {"$size": "$OverView"},
-            "OverView": {
-                "$filter": {
-                    "input": "$OverView",
-                    "as": "row",
-                    "cond": filter_expression
-            },
-        }
-        }
+            "$match": {
+                "account_details.Account Number": str(account_number)
+            }
+        },
+
+        {
+            "$project": {
+                "_id": 0,
+                "merged_reference_id": 1,
+                "OverView": {
+                    "$ifNull": [
+                        "$analysis_metadata.Data.OverView",
+                        []
+                    ]
+                }
+            }
+        },
+
+        {
+            "$unwind": "$OverView"
+        },
+
+        {
+            "$match": {
+                "OverView.parsedMonthDate": {
+                    "$gte": from_dt,
+                    "$lte": to_dt
+                }
+            }
+        },
+
+        {
+            "$group": {
+                "_id": None,
+
+                "merged_reference_id": {
+                    "$push": "$merged_reference_id"
+                },
+
+                "OverView": {
+                    "$push": "$OverView"
+                }
+            }
+        },
+
+        {
+            "$project": {
+                "_id": 0,
+                "merged_reference_id": 1,
+                "OverView": 1
+            }
         }
     ]
 
+
     cursor = db.bsa_merged_bankstatements.aggregate(pipeline)
     results = await cursor.to_list(length=1)
+    print(results)
 
     if not results:
-        logger.warning("bank_statement_report.not_found | user_id=%s", user_id)
+        logger.warning("bank_statement_report.not_found | account_number=%s", account_number)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "bank_statement_report not found for this account"}
@@ -383,8 +432,14 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
 
     doc = results[0]
 
-    if doc.get("OverViewCount", 0) == 0:
-        logger.warning("bank_statement_report.empty_overview | user_id=%s", user_id)
+    monthly_rows = doc.get("OverView", [])
+
+    if not monthly_rows:
+        logger.warning(
+            "bank_statement_report.empty_overview | account_number=%s",
+            account_number
+        )
+
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "No monthly overview data found"}
@@ -393,7 +448,7 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     monthly_rows: list = doc.get("OverView", [])
 
     if (from_dt or to_dt) and not monthly_rows:
-        logger.warning("bank_statement_report.no_rows_in_range | user_id=%s", user_id)
+        logger.warning("bank_statement_report.no_rows_in_range | user_id=%s", account_number)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"message": "No data found for the given date range"}
@@ -414,8 +469,6 @@ async def bank_statement_report_consolidated(db, user_id: str, from_date: str = 
     for r in monthly_rows:
         # This replaces any None with 0.0 for all fields in the row
         cleaned_rows.append({k: (v if v is not None else 0.0) for k, v in r.items()})
-    elapsed_ms = (time.perf_counter() - start_time) * 1000
-    logger.info("bank_statement_report.success | user_id=%s | duration_ms=%.2f", user_id, elapsed_ms)
 
     return {
         "consolidated_overall_report": consolidated,

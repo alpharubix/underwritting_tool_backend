@@ -51,8 +51,6 @@ async def connect_to_databases(app: FastAPI): #database first approch
         app.state.mongo_db  = mongo_db
         app.state.postgres_conn = postgres_conn
         print('database connected successfully')
-        upload_hashmap = UploadHashMap()
-        asyncio.create_task(upload_hashmap.clean_expired_entries())
         asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
@@ -98,4 +96,4 @@ app.include_router(log_router)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8080"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port)
+    uvicorn.run("main:app", host="0.0.0.0", port=port,reload=True)

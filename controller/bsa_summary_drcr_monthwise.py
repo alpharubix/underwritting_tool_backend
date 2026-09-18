@@ -691,22 +691,45 @@ async def bsa_summary_of_debit_credit_monthwise_prathamesh_first_version(db,user
 
 
 
-async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date):
-    logger.info("Bank Statement Summary of Debit and Credit | user_id=%s ",user_id)
+async def bsa_summary_of_debit_credit_monthwise(db,request):
+    input_body = await request.json()
+
+    from_date = input_body.get("from_date")
+    to_date = input_body.get("to_date")
+    account_number = input_body.get("account_number")
+
+    if not from_date or not to_date or not account_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "from_date, to_date, account_number is required"
+            }
+        )
+    logger.info("Bank Statement Summary of Debit and Credit | account_number=%s ",account_number)
     start_time=time.perf_counter()
 
-    if not user_id or not isinstance(user_id, str) or not user_id.strip():
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "Invalid user_id"}
-        )
-    if not isinstance(from_date, datetime) or not isinstance(to_date, datetime):
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "Internal error: from_date and to_date must be datetime objects"}
-        )
-    normalized_from, normalized_to = normalize_date_range(from_date, to_date)
-    logger.info("Normalized date range | from=%s | to=%s", normalized_from, normalized_to)
+    from_dt = datetime.strptime(
+        from_date,
+        "%Y-%m-%d"
+    ).replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
+
+    to_dt = datetime.strptime(
+        to_date,
+        "%Y-%m-%d"
+    ).replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0
+    )
+
 
     try:
         pipeline = [
@@ -730,13 +753,12 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             ############################################################
             {
                 "$match": {
-                    "user_id": user_id
+                    "account_details.Account Number": account_number
                 }
             },
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":1,
                     "summary": {
                         "$filter": {
                             "input": {
@@ -751,13 +773,13 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
                                     {
                                         "$gte": [
                                             "$$summary.parsedMonthDate",
-                                            normalized_from
+                                             from_dt
                                         ]
                                     },
                                     {
                                         "$lte": [
                                             "$$summary.parsedMonthDate",
-                                            normalized_to
+                                           to_dt
                                         ]
                                     }
                                 ]
@@ -846,7 +868,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":"$account_details",
                     "month": "$summary.month",
                     "parsedMonthDate": "$summary.parsedMonthDate",
                     "cash_deposit": {
@@ -948,7 +969,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "user_id": 1,
-                    "account_details":"$account_details",
                     "month": 1,
                     "parsedMonthDate": 1,
                     "mw_inflow_val": {
@@ -1081,7 +1101,6 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
             {
                 "$project": {
                     "_id": 1,
-                    "account_details":"$account_details",
                     "monthly_breakdown": {
                         "$map": {
                             "input": "$monthly_breakdown",
@@ -1147,8 +1166,8 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
 
     except Exception as e:
         logger.error(
-            "bank_statement_report.preflight_failed | user_id=%s | error=%s",
-            user_id, str(e), exc_info=True
+            "bank_statement_report.preflight_failed | account_number%s | error=%s",
+            account_number, str(e), exc_info=True
         )
         raise
 
@@ -1158,22 +1177,22 @@ async def bsa_summary_of_debit_credit_monthwise(db,user_id:str,from_date,to_date
         result = await cursor.to_list(length=None)
         pipeline_end = time.perf_counter()
         logger.info(
-            "bank_statement_report.aggregation_completed | user_id=%s | pipeline_time=%.2f seconds | result_count=%s",
-            user_id, pipeline_end - pipeline_start, len(result)
+            "bank_statement_report.aggregation_completed | account_number=%s | pipeline_time=%.2f seconds | result_count=%s",
+            account_number, pipeline_end - pipeline_start, len(result)
         )
         if not result:
-            logger.warning("bank_Statement_Report aggregation | user_id=%s | Message:no data found after aggregation ",user_id)
+            logger.warning("bank_Statement_Report aggregation | account_number=%s | Message:no data found after aggregation ",account_number)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"message":"No summary data found for this user in the given date range"})
 
         total_time = time.perf_counter() - start_time
-        logger.info("total_time | user_id=%s | %.2fs", user_id, total_time)
+        logger.info("total_time | account_number=%s | %.2fs", account_number, total_time)
         return result[0]
     except HTTPException:
         raise
     except Exception as e:
         logger.error(
-            "bank_statement_report.aggregation_failed | user_id=%s | error=%s",
-            user_id, str(e), exc_info=True
+            "bank_statement_report.aggregation_failed | account_number=%s | error=%s",
+            account_number, str(e), exc_info=True
         )
         raise HTTPException(
             status_code=500,

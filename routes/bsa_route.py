@@ -3,12 +3,12 @@ from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-
-from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus
-from controller.bsa_uploads import  bank_names, pdf_date_parser,pdf_upload_consumer
+from starlette.responses import JSONResponse
+from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus,AnchorRole
+from controller.bsa_uploads import  bank_names,pdf_upload_consumer_v2
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
 from controller.update_webhook_response import update_webhook_response
-from controller.bank_statement_report import bank_statement_report, get_crm_bank_statement_report, get_report_date_range
+from controller.bank_statement_report import get_crm_bank_statement_report, get_report_date_range
 from typing import List, Optional
 from controller.bsa_webhook_controller import fetch_and_save_bank_report, is_reference_id_mergable, merge_reference_ids
 from controller.backgroud_task_controller import send_report_mail_based_on_request
@@ -20,7 +20,8 @@ from controller.cashflow_controller import r1xcrm_build_cashflow_report
 from controller.overview_month_wise import r1xcrm_bank_statement_report_consolidated
 from services.service_request_service import get_service_request,update_service_request
 from controller.payments_controller.wallet_contoller import consume_reserved_balance
-
+from controller.bank_statement_report import get_available_bank_accounts
+from controller.individual_bank_statement_report import individual_overview_by_account,individual_eod_by_account,individual_loan_transaction_by_account
 import json
 from datetime import datetime
 
@@ -46,8 +47,7 @@ async def upload_bsa(
                 detail={"message": "Input data is required"})
 
         data_params = json.loads(data)
-
-        response = await pdf_date_parser(files,data_params)
+        response = await pdf_upload_consumer_v2(request=request,files=files,mongodb_connection=request.app.state.mongo_db,data_params=data_params,background_task=background_tasks)
     except JSONDecodeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -59,22 +59,22 @@ async def upload_bsa(
         raise e
     return response
 
-@bsa_router.post("/upload_ref_id")
-async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks,cust_id:Optional[str]=None):
-    try:
-          input_data = await request.json()
-
-          return await pdf_upload_consumer(request=request,input_body=input_data,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks,cust_id=cust_id)
-
-    except JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message":"Invalid JSON Input"}
-        )
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise e
+# @bsa_router.post("/upload_ref_id")
+# async def upload_to_bsa(request:Request, background_tasks: BackgroundTasks,cust_id:Optional[str]=None):
+#     try:
+#           input_data = await request.json()
+#
+#           return await pdf_upload_consumer(request=request,input_body=input_data,mongodb_connection=request.app.state.mongo_db,background_task=background_tasks,cust_id=cust_id)
+#
+#     except JSONDecodeError:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST,
+#             detail={"message":"Invalid JSON Input"}
+#         )
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         raise e
 
 
 
@@ -106,7 +106,7 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         ref_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id": reference_id})
         if ref_doc and ref_doc.get("is_merge_request"):
             print(f"reference_id {reference_id} is a merge result — storing directly")
-            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url,ref_doc)
             background_tasks.add_task(
                 send_report_mail_based_on_request,
                 user_id,
@@ -118,27 +118,13 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
             await mongodb_connection["bsa_reference"].update_one({"reference_id": reference_id}, {"$set": {"merge_request_status":"COMPLETED"}})
             return {"status": "success", "message": "Merge result received — report ingestion started"}
 
-        merge_status = await is_reference_id_mergable(
+        merge_status,existing_doc = await is_reference_id_mergable(
             user_id=user_id,
-            reference_id=reference_id,
             json_url=json_url,
             mongodb_connection=mongodb_connection
         )
 
         if merge_status == "MERGABLE":
-            existing_doc = await mongodb_connection["bsa_merged_bankstatements"].find_one(
-                {"user_id": user_id, "status": "ACTIVE"},
-                sort=[("created_at", -1)]
-            )
-
-            if not existing_doc:
-                print(f"WARN: No existing doc found for user {user_id} — storing directly")
-                background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-                background_tasks.add_task(
-                    send_report_mail_based_on_request, user_id, reference_id,
-                    request.app.state.mongo_db, request.app.state.postgres_conn,
-                )
-                return {"status": "success", "message": "Fallback — report ingestion started"}
 
             existing_reference_id = existing_doc["last_merged_reference_id"]
             print(f"Merging [{existing_reference_id}] + [{reference_id}] for user {user_id}")
@@ -181,11 +167,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
                                                                           "service_status": ServiceRequestStatus.SERVICE_STATUS_SUCCESS.value,
                                                                           "upstream_status": UpstreamStatus.UPSTREAM_STATUS_SUCCESS.value})
                     print("Service update result", service_update)
-            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url)
-            background_tasks.add_task(
-                send_report_mail_based_on_request, user_id, reference_id,
-                request.app.state.mongo_db, request.app.state.postgres_conn,
-            )
+            background_tasks.add_task(fetch_and_save_bank_report, db, user_id, reference_id, json_url,ref_doc)
+            # background_tasks.add_task(
+            #     send_report_mail_based_on_request, user_id, reference_id,
+            #     request.app.state.mongo_db, request.app.state.postgres_conn,
+            # )
             return {"status": "success", "message": "Report ingestion started"}
 
         else:  # ERROR
@@ -198,23 +184,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail={"message":"Internal server error"})
 
 
-@bsa_router.get("/month-wise-overview")
-async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),cust_id :Optional[str]=None):
+@bsa_router.post("/month-wise-overview")
+async def bsa_report(request:Request):
     db = request.app.state.mongo_db
-    user_id = request.state.user_id
 
-    requester_role = request.state.role
-
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-            )
-        user_id = cust_id
-
-    success_data = await bank_statement_report_consolidated(db, user_id,from_date,to_date)
+    success_data = await bank_statement_report_consolidated(db,request)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     
@@ -223,48 +197,11 @@ async def bsa_report(request:Request,from_date: Optional[str] = Query(None),
         "data": success_data
     }
 
-@bsa_router.get("/summary-of-debit-and-credit_monthwise")
-async def bsa_summary_of_debit_and_credit(request:Request,from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),cust_id :Optional[str]=None):
-    
-    print(from_date,to_date)
+@bsa_router.post("/summary-of-debit-and-credit_monthwise")
+async def bsa_summary_of_debit_and_credit(request:Request):
+
     db=request.app.state.mongo_db
-    user_id=request.state.user_id
-    if not from_date or not to_date:
-        raise HTTPException(
-            status_code=400,
-            detail="from_date and to_date are required query parameters"
-        )
-    requester_role = request.state.role
-
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(
-                status_code=400,
-                detail="Since the role is accesssing on behalf of user, hence cust_id is required"
-            )
-
-        user_id = cust_id
-    try:
-        from_dt = datetime.strptime(from_date, "%Y-%m-%d")                          # 2025-04-01 00:00:00
-        to_dt   = datetime.strptime(to_date,   "%Y-%m-%d").replace(hour=23, minute=59, second=59)  # 2025-05-31 23:59:59
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
-    if from_dt > to_dt:
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "from_date must be earlier than or equal to to_date"}
-        )
-    
-    delta = to_dt - from_dt
-    if delta.days > 730:
-        raise HTTPException(
-            status_code=400,
-            detail={"message": "Date range cannot exceed 2 years"}
-        )
-    
-    success_data=await bsa_summary_of_debit_credit_monthwise(db,user_id,from_dt,to_dt)
+    success_data=await bsa_summary_of_debit_credit_monthwise(db,request)
     if success_data is None:
         raise HTTPException(status_code=404, detail="Bank statement not found for this user")
     return {
@@ -336,30 +273,37 @@ async def crm_bsa_statement_report(request:Request,acc_id:str):
         )
 
 
-@bsa_router.get("/cashflow")
+@bsa_router.post("/cashflow")
 async def cashflow_report(
     request:    Request,
-    from_month: str = Query(..., description="Start month in YYYY-MM format, e.g. 2024-01"),
-    to_month:   str = Query(..., description="End month in YYYY-MM format, e.g. 2024-12"),
-    cust_id:Optional[str]=None
 ):
     db=request.app.state.mongo_db
-    user_id=request.state.user_id
-    requester_role = request.state.role
 
 
-    if requester_role in ALLOWED_ROLES:
-        if not cust_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Since the role is on behalf of the user, cust_id is required")
-        user_id = cust_id
-
-
-    result = await build_cashflow_report(db, user_id, from_month, to_month)
+    result = await build_cashflow_report(db,request)
 
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result)
  
     return result
+
+@bsa_router.post("/individual/overview")
+async def individual_overview_report(
+    request: Request,
+):
+    return await individual_overview_by_account(db=request.app.state.mongo_db,request=request)
+
+@bsa_router.post("/individual/eod-analysis")
+async def individual_eod_analysis_report(
+    request: Request,
+):
+    return await individual_eod_by_account(db=request.app.state.mongo_db,request=request)
+
+@bsa_router.post("/individual/loan-transactions")
+async def individual_loan_transactions_report(
+    request: Request,
+):
+    return await individual_loan_transaction_by_account(request=request,db=request.app.state.mongo_db)
 
 @bsa_router.get("/get-bank-names")
 async def bsa_get_bank_names():
@@ -374,18 +318,11 @@ async def bsa_get_bank_names():
             detail={"message": "Internal server error please contact the admin for support."}
         )
 
-@bsa_router.get("/report-date-range")
+@bsa_router.post("/report-date-range")
 async def report_date_range(
-    request: Request,cust_id:Optional[str]=None):
-    user_id = request.state.user_id
+    request: Request):
     try:
-        requester_role = request.state.role
-        if requester_role in ALLOWED_ROLES:
-            user_id = cust_id
-        if requester_role in ALLOWED_ROLES and cust_id==None:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="Since the role is on behalf of the user, cust_id is required")
-
-        return await get_report_date_range(user_id=user_id,db=request.app.state.mongo_db)
+        return await get_report_date_range(request=request,db=request.app.state.mongo_db)
     except HTTPException as e:
        raise e
 
@@ -504,3 +441,56 @@ async def r1xcrm_bsa_report(request: Request, acc_id: int, from_date: Optional[s
         "status": "success",
         "data": success_data
     }
+
+
+@bsa_router.get("/bank-accounts")
+async def bank_report(request: Request,cust_id:Optional[str]=Query(None)):
+    return await get_available_bank_accounts(request,cust_id)
+
+
+@bsa_router.post("/account-details")
+
+async def account_details(request: Request):
+    try:
+        db = request.app.state.mongo_db
+
+        input_body = await request.json()
+        account_number = input_body.get("account_number")
+
+
+
+        if not account_number:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": "Account number is required"
+                }
+            )
+
+        doc = await db.bsa_merged_bankstatements.find_one(
+            {
+                "account_details.Account Number": account_number
+            },
+            {
+                "_id": 0,
+                "account_details": 1
+            }
+        )
+
+        if not doc:
+            raise HTTPException(status_code=404, detail={"message":"Account not found for this user"})
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Account details fetched successfully",
+                "data": doc
+            }
+        )
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid JSON"} )
+
+
+    except Exception as e:
+        raise HTTPException(status_code=500,detail={"message":"Internal server error"})

@@ -1,11 +1,12 @@
 import logging
 import time
-from datetime import datetime
+from json import JSONDecodeError
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
 from starlette import status
 from starlette.responses import JSONResponse
+
 
 logger = logging.getLogger(__name__)
 
@@ -586,19 +587,33 @@ async def get_crm_bank_statement_report(db,acc_id:int):
         raise e
     
 
-async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
+async def get_report_date_range(request,db:AsyncIOMotorDatabase):
     try:
+        input_body = await request.json()
+
+        account_number = input_body.get("account_number")
+
+        if not account_number:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"message": "Account number is required"}
+            )
+
         doc = await db.bsa_merged_bankstatements.find_one(
-            {"user_id":user_id},
+            {"account_details.Account Number": account_number},
             {
-                "_id":0,
-                "from_date":1,
-                "to_date":1
+                "_id": 0,
+                "last_merged_reference_id": 1,
+                "from_date": 1,
+                "to_date": 1
             }
         )
-        if not doc:
 
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail={"message":"No date range found for this user"})
+        if not doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"message": "No date range found for this account"}
+            )
 
         from_date = doc.get("from_date")
         to_date = doc.get("to_date")
@@ -614,12 +629,98 @@ async def get_report_date_range(db:AsyncIOMotorDatabase,user_id:str):
             content={
                 "data": {
                     "from_date": from_date,
-                    "to_date": to_date
+                    "to_date": to_date,
                 }
             }
         )
+
+    except JSONDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": "Invalid input body"}
+        )
+
+    except HTTPException as e:
+        raise e
+
+    except Exception as e:
+        print("Error happened at get_report_date_range controller:", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": "Internal server error"}
+        )
+
+
+async def get_available_bank_accounts(request,cust_id):
+    try:
+        user_id = request.state.user_id
+        db = request.app.state.mongo_db
+        if cust_id:
+            user_id = cust_id
+        docs = await db.bsa_merged_bankstatements.find(
+            {
+                "user_id": user_id
+            },
+            {
+                "_id": 0,
+                "last_merged_reference_id": 1,
+                "account_details.Bank Name": 1
+            }
+        ).to_list(None)
+
+        print("Printing docs", docs)
+
+        if not docs:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"message": "No Bank Account found for this user"})
+
+        reference_id_mapper = {}
+        reference_id_list = []
+
+        for doc in docs:
+            reference_id = doc.get("last_merged_reference_id")
+
+            if reference_id:
+                reference_id_list.append(reference_id)
+
+                reference_id_mapper[reference_id] = {
+                    "bank_name": doc.get("account_details", {}).get("Bank Name"),
+                }
+
+        reference_docs = await db.bsa_reference.find(
+            {
+                "reference_id": {
+                    "$in": reference_id_list
+                }
+            },
+            {
+                "_id": 0,
+                "input_data": 1,
+                "reference_id": 1
+            }
+                        ).to_list(None)
+        response = []
+        print("Printing reference_docs", reference_docs)
+        for reference in reference_docs:
+            bank_name = reference_id_mapper.get(reference["reference_id"], {}).get("bank_name")
+            input_data = reference.get("input_data")
+            input_data["bank_name"] = bank_name
+            response.append(input_data)
+
+
+        return JSONResponse(status_code=status.HTTP_200_OK,content={"data":response})
+
     except HTTPException as e:
         raise e
     except Exception as e:
-        print("Error happend at get_report_date_range controller",e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error"})
+        print("exception raised",e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail={"message":"Internal server error please contact admin"})
+
+
+
+
+
+
+
+
