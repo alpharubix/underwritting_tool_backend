@@ -256,8 +256,6 @@ async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_tas
                 detail={"message":f"Only PDF files are allowed. Invalid files: {', '.join(invalid_files)}"}
             )
 
-        if not data_params.get("filePassword"): #remove the password if not provided by the user
-            data_params.pop("filePassword")
 
         scoreme_response, request_initiated_time = await upload_to_scoreme(files, data_params)
 

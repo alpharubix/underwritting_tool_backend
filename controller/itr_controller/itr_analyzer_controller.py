@@ -18,6 +18,7 @@ from custom_exceptions.scoreme_exceptions import raise_itr_post_link_exception
 from services.scoreme_service import update_document
 from services.service_request_service import create_service_request, get_service_request, update_service_request
 from utils.auth_utility import is_email_valid
+from controller.payments_controller.wallet_contoller import release_reserved_balance
 import httpx
 logging.basicConfig(level=logging.INFO)
 
@@ -293,6 +294,8 @@ async def poll_email_link_status(database_conn) : #this function will run every 
                                                                                      "link_response_message": "The internal processing link is no longer active.",
                                                                     "last_updated_at":datetime.now(timezone.utc)}}))
                             print("REMOVING OLD LINKS FROM THE PIPELINE")
+                            #release the payment if deducted
+                            await release_reserved_balance(database=database_conn,service=AllowedService.ITR.value,user_id=link.get("user_id"),amount=ServicePrice.ITR.value,reference_id=reference_id)
                             continue
                         try:
                             response = await client.get(
