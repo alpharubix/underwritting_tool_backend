@@ -163,18 +163,17 @@ async def pdf_upload_consumer(request,input_body,mongodb_connection,background_t
            #create the bsa_ref document post successfull response from the scoreme server
            await create_bsa_ref_document(user_id=user_id,reference_id=reference_id,input_data=data_params,bsa_request_status="Submitted",bsa_request_initiated_time=request_initiated_time,bsa_request_response_message=response_message,bsa_request_response_code=response_code,mongobd_connection=mongodb_connection)
 
-           if requester_role in ALLOWED_ROLES:
-               # Reserve anchor/admin wallet only for on-behalf-of service requests.
-               print("BSA AMOUNT->",ServicePrice.BSA.value)
-               reserve_result = await reserve_service_balance(request=request,user_id=user_id,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
-               print(reserve_result)
-               if not reserve_result.get("success"):
-                   raise HTTPException(
-                       status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                       detail={"message": reserve_result.get("message")},
-                   )
+           # Reserve balance
+           print("BSA AMOUNT->",ServicePrice.BSA.value)
+           reserve_result = await reserve_service_balance(request=request,user_id=user_id,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
+           print(reserve_result)
+           if not reserve_result.get("success"):
+               raise HTTPException(
+                   status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                   detail={"message": reserve_result.get("message")},
+               )
 
-               await create_service_request(database=request.app.state.mongo_db,user_id=user_id,requested_by=request.state.user_id,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
+           await create_service_request(database=request.app.state.mongo_db,user_id=user_id,requested_by=request.state.user_id,requested_by_role=requester_role,service=AllowedService.BSA.value,amount=ServicePrice.BSA.value,reference_id=reference_id)
 
            #create a background task to store the input bsa files to the storage object
            background_task.add_task(upload_files_to_gcs_and_save_metadata,files,user_id,reference_id,mongodb_connection)

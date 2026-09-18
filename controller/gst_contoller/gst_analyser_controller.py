@@ -574,6 +574,11 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
         if not gstin or not from_month or not to_month:
            raise HTTPException(status_code=400, detail={"message": "gstin and from_month and to_month are required"})
 
+        # restrict the months to only 12 months
+        gst_month_validation_result = __gst_month_validator(from_gst=from_month, to_gst=to_month)
+
+        if not gst_month_validation_result.get("is_success"):
+            raise HTTPException(status_code=400,detail={"message": gst_month_validation_result.get("message")})
 
         async with AsyncClient() as client:
            try:
@@ -623,36 +628,37 @@ async def send_gstin_to_score_me(request: Request,cust_id:str)->JSONResponse:
 
             await gst_reference_coll.insert_one(gst_reference_doc)
 
-            if requester_role in ALLOWED_ROLES:
-                reserve_result = await reserve_service_balance(
-                    request=request,
-                    user_id=user_id,
-                    service=AllowedService.GST.value,
-                    amount=ServicePrice.GST.value,
-                    reference_id=reference_id,
+
+            reserve_result = await reserve_service_balance(
+                request=request,
+                user_id=user_id,
+                service=AllowedService.GST.value,
+                amount=ServicePrice.GST.value,
+                reference_id=reference_id,
+            )
+
+            if not reserve_result.get("success"):
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail={"message": reserve_result.get("message")},
                 )
 
-                if not reserve_result.get("success"):
-                    raise HTTPException(
-                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                        detail={"message": reserve_result.get("message")},
-                    )
-
-                await create_service_request(
-                    database=database,
-                    user_id=user_id,
-                    requested_by=request.state.user_id,
-                    service=AllowedService.GST.value,
-                    amount=ServicePrice.GST.value,
-                    reference_id=reference_id,
-                )
-                print("Reserved amount for Gst",reserve_result)
+            await create_service_request(
+                database=database,
+                user_id=user_id,
+                requested_by=request.state.user_id,
+                requested_by_role=requester_role,
+                service=AllowedService.GST.value,
+                amount=ServicePrice.GST.value,
+                reference_id=reference_id,
+            )
+            print("Reserved amount for Gst",reserve_result)
 
 
             return JSONResponse(status_code=202,content={"message": "gstin sent successfully","data":{"gstin":gstin,"gst_reference_id":reference_id}})
 
         else:
-            raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
+         raise HTTPException(status_code=500, detail={"message": "unknown error from external server contact admin for support"})
 
 
 
@@ -713,6 +719,7 @@ async def get_all_user_ref_ids(request: Request,cust_id:str,is_crm:bool = False)
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Forbidden access !")
 
         gst_ref_coll: AsyncIOMotorCollection = request.app.state.mongo_db["gst_reference"]
+
         docs = await gst_ref_coll.find({"user_id":user_id},{"_id":0,"gst_reference_id_status":1,"from_month":1,"to_month":1,"reference_id":1,"gstin":1}).to_list(None)
 
         if not docs:
@@ -1070,6 +1077,52 @@ async def get_r1xcrm_monthly_sales_purchase_summary(request:Request) -> JSONResp
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
+
+
+
+
+def __gst_month_validator(from_gst,to_gst):
+
+    from_month = from_gst[0:2]
+    from_year= from_gst[2:6]
+    to_month = to_gst[0:2]
+    to_year = to_gst[2:6]
+
+    try:
+        from_date = datetime.strptime(f"01-{from_month}-{from_year}", '%d-%m-%Y')
+        to_date = datetime.strptime(f"01-{to_month}-{to_year}", '%d-%m-%Y')
+
+    except ValueError:
+        return {"is_success":False,"message":"Invalid month format"}
+
+
+    if from_date > to_date:
+        return {
+            "is_success": False,
+            "message": "from_month can't be greater than to_month"
+        }
+
+    month_range = (
+            (to_date.year - from_date.year) * 12
+            + (to_date.month - from_date.month)
+            + 1
+    )
+    print("given month",month_range)
+
+    if month_range != 12:
+        return {
+            "is_success": False,
+            "message": "Entered months should be exactly 12 months"
+        }
+
+    return {
+        "is_success": True,
+        "message": "Success"
+    }
+
+
+
 
 
 
