@@ -56,8 +56,6 @@ async def upload_bsa(
                 for file in files
             }
 
-        file_name = data_params["filePassword"]
-
         response = await pdf_upload_consumer_v2(request=request,files=files,mongodb_connection=request.app.state.mongo_db,data_params=data_params,background_task=background_tasks)
     except JSONDecodeError:
         raise HTTPException(
