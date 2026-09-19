@@ -18,6 +18,7 @@ import os
 from utils.bsa_upload_utility import get_pdf_date_range_parser_prompt
 from controller.payments_controller.wallet_contoller import reserve_service_balance
 from dotenv import (load_dotenv)
+from custom_exceptions.scoreme_exceptions import raise_bsa_exception
 load_dotenv()
 
 ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN')
@@ -153,6 +154,8 @@ async def pdf_upload_consumer(request,input_body,mongodb_connection,background_t
         ]
 
         scoreme_response,request_initiated_time = await upload_to_scoreme(files, data_params)
+
+
 
         if scoreme_response:
            # fetch the reference id and status from the dict
