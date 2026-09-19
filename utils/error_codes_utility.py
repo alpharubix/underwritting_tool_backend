@@ -27,7 +27,7 @@ SCOREME_BSA__ERROR_MAP = {
     "ERU060": (status.HTTP_400_BAD_REQUEST, "Invalid Reference Id / Report Type Mismatch."),
     "ENI004": (status.HTTP_404_NOT_FOUND, "No Information Found."),
     "EUP007": (status.HTTP_500_INTERNAL_SERVER_ERROR, "Unable To Process. Please Reach Out To Support."),
-    "EUF059": (status.HTTP_422_UNPROCESSABLE_CONTENT_BAD_REQUEST, "The uploaded file does not meet the criteria.Please upload digital PDF file."),
+    "EUF059": (status.HTTP_422_UNPROCESSABLE_CONTENT, "The uploaded file does not meet the criteria.Please upload digital PDF file."),
 }
 
 
