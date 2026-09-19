@@ -3,6 +3,7 @@ from starlette import status
 
 
 SCOREME_BSA__ERROR_MAP = {
+    # --- Existing Error Codes ---
     "EBF017": (status.HTTP_400_BAD_REQUEST,  "Blank Input Field."),
     "EIP018": (status.HTTP_422_UNPROCESSABLE_ENTITY, "Incorrect Input."),
     "EPI022": (status.HTTP_400_BAD_REQUEST,  "Payload is Incorrect."),
@@ -20,7 +21,15 @@ SCOREME_BSA__ERROR_MAP = {
     "EFP070": (status.HTTP_400_BAD_REQUEST,  "File Password not Found."),
     "EIP069": (status.HTTP_401_UNAUTHORIZED, "Incorrect File Password."),
     "EUA012": (status.HTTP_401_UNAUTHORIZED, "Unauthorized Access."),
+
+    # --- Newly Identified Error Codes (BSA & Record APIs) ---
+    "ENR029": (status.HTTP_404_NOT_FOUND, "No Record Found."),
+    "ERU060": (status.HTTP_400_BAD_REQUEST, "Invalid Reference Id / Report Type Mismatch."),
+    "ENI004": (status.HTTP_404_NOT_FOUND, "No Information Found."),
+    "EUP007": (status.HTTP_500_INTERNAL_SERVER_ERROR, "Unable To Process. Please Reach Out To Support."),
+    "EUF059": (status.HTTP_422_UNPROCESSABLE_CONTENT_BAD_REQUEST, "The uploaded file does not meet the criteria.Please upload digital PDF file."),
 }
+
 
 
 SCOREME_GST_BASIC_INFO_ERROR_MAP = {
