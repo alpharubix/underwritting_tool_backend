@@ -1,15 +1,20 @@
 import asyncio
+import io
 import json
 import os
+from copy import copy
 from datetime import datetime, timezone, timedelta
+from json import JSONDecodeError
 from typing import Optional
+from openpyxl.drawing.image import Image as XLImage
+from openpyxl import load_workbook
 from pymongo import UpdateOne
 from starlette import status
 from fastapi import HTTPException, BackgroundTasks
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette.requests import Request
 import logging
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 import config.config as url
 from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus
 from controller.backgroud_task_controller import send_itr_report_mail_based_on_request
@@ -902,4 +907,72 @@ async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
         )
     
     return await get_ratio_analysis(request,str(user["_id"]),is_crm=True)
+
+
+async def export_itr_report(request):
+    try:
+        user_id = request.state.user_id
+        coll = request.app.state.mongo_db["itr_reference"]
+
+        url_docs = await coll.find_one({"user_id":user_id,"is_consumed":True},{"_id":0,"itr_report_url":1})
+
+        if not url_docs:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Report not found")
+
+        url = url_docs.get("itr_report_url").get("excelUrl")
+
+        async with httpx.AsyncClient() as client:
+            excel_response = await client.get(url, headers={"clientId": os.getenv("CLIENT_ID"),"clientSecret": os.getenv("CLIENT_SECRET")})
+
+        if excel_response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                                detail={"message": "Bad Gateway try again later"})
+
+        excel_bytes = excel_response.content
+
+        wb = load_workbook(io.BytesIO(excel_bytes))
+
+        for ws in wb.worksheets:
+
+            if not ws._images:
+                continue
+
+            old_image = ws._images[0]
+
+            # Preserve the original position only
+            anchor = copy(old_image.anchor)
+
+            # Load your logo at its natural/original dimensions
+            new_image = XLImage("assets/r1xchange_logo_733x109_crisp.png")
+
+            # Don't set width/height again
+            new_image.anchor = copy(old_image.anchor)
+
+            ws._images.clear()
+            ws.add_image(new_image)
+
+        output = io.BytesIO()
+
+        wb.save(output)
+
+        output.seek(0)
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": 'attachment; filename="GST_analysis_report.xlsx"'
+            }
+        )
+    except JSONDecodeError as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"message": "Invalid JSON"})
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail={"message": "Internal server error"})
+
+
+
 

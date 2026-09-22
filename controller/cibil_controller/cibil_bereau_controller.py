@@ -1,15 +1,19 @@
+import io
 import json
 import logging
 import os
 import uuid
+from copy import copy
 from datetime import datetime, timezone
-
+from openpyxl.drawing.image import Image as XLImage
 import httpx
 from dotenv import load_dotenv
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from openpyxl import load_workbook
 from starlette import status
+from starlette.responses import StreamingResponse
 
 from config.config import (
     SCOREME_GENERATE_CIBIL_OTP_URL,
@@ -1168,6 +1172,142 @@ async def otp_flow_id_webhook_status(otp_flow_id,request,cust_id):
                 "responseCode": "SYS_INT_ERR",
             },
         )
+
+
+async def export_cibil_report(request):
+    try:
+        mongo_db = request.app.state.mongo_db
+
+        input_data = await request.json()
+
+        reference_id = input_data.get("reference_id")
+
+        if not reference_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="reference_id is required"
+            )
+
+        coll = mongo_db["cibil_report"]
+
+        cibil_doc = await coll.find_one(
+            {
+                "reference_id": reference_id,
+            },
+            {
+                "_id": 0,
+                "source_urls": 1
+            }
+        )
+
+        if not cibil_doc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="CIBIL report not found"
+            )
+
+        source_urls = cibil_doc.get("source_urls", {})
+        url = source_urls.get("excelUrl")
+
+        if not url:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="CIBIL Excel report URL not found"
+            )
+
+        headers = {
+            "clientId": os.getenv("CLIENT_ID"),
+            "clientSecret": os.getenv("CLIENT_SECRET")
+        }
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            excel_response = await client.get(
+                url,
+                headers=headers
+            )
+
+        if excel_response.status_code != 200:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "message": "Unable to download CIBIL report"
+                }
+            )
+
+        excel_bytes = excel_response.content
+
+        wb = load_workbook(io.BytesIO(excel_bytes))
+
+        if wb.worksheets:
+            wb.worksheets[-1].title = "CRISP ANALYSIS"
+
+        logo_path = "assets/r1xchange_logo_733x109_crisp.png"
+
+        for ws in wb.worksheets:
+
+            if not ws._images:
+                continue
+
+            old_image = ws._images[0]
+
+            # Create new CRISP logo
+            new_image = XLImage(logo_path)
+
+            # Keep exactly the same size as the original logo
+            new_image.width = old_image.width
+            new_image.height = old_image.height
+
+            # Keep the same position
+            new_image.anchor = copy(old_image.anchor)
+
+            # Replace the existing image
+            ws._images[0] = new_image
+
+        output = io.BytesIO()
+
+        wb.save(output)
+
+        output.seek(0)
+
+        return StreamingResponse(
+            output,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            headers={
+                "Content-Disposition": (
+                    'attachment; filename="CIBIL_analysis_report.xlsx"'
+                )
+            }
+        )
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail={"message":"Invalid Json"})
+
+    except HTTPException:
+        raise
+
+    except httpx.RequestError as e:
+        print(f"CIBIL report download error: {e}")
+
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "message": "Unable to connect to CIBIL report provider"
+            }
+        )
+
+    except Exception as e:
+        print(f"Export CIBIL report error: {e}")
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "message": "Internal server error"
+            }
+        )
+
+
 
 
 
