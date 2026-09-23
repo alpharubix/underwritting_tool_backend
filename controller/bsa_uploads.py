@@ -288,7 +288,7 @@ async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_tas
 
             await create_service_request(database=request.app.state.mongo_db, user_id=user_id,
                                          requested_by=request.state.user_id, service=AllowedService.BSA.value,
-                                         amount=ServicePrice.BSA.value, reference_id=reference_id)
+                                         amount=ServicePrice.BSA.value, reference_id=reference_id,requested_by_role=requester_role)
 
             # create a background task to store the input bsa files to the storage object
             background_task.add_task(upload_files_to_gcs_and_save_metadata, files, user_id, reference_id,

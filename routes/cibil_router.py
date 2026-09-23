@@ -12,7 +12,7 @@ from controller.cibil_controller.cibil_bereau_controller import (
     otp_flow_id_webhook_status,
     payment_history,
     resend_cibil_otp,
-    validate_cibil_otp,
+    validate_cibil_otp, export_cibil_report,
 )
 
 ALLOWED_ROLES = ('ADMIN','ANCHOR','SUPER_ANCHOR')
@@ -74,3 +74,7 @@ async def get_r1xcrm_cibil_analysis(request: Request, reference_id: str):
 @cibil_router.get("/webhook-status/{otp_flow_id}")
 async def get_cibil_webhook_status(request: Request, otp_flow_id: str,cust_id:Optional[str]=None):
     return await otp_flow_id_webhook_status(otp_flow_id=otp_flow_id,request=request,cust_id=cust_id)
+
+@cibil_router.post("/export-report")
+async def export_report(request: Request):
+    return await export_cibil_report(request=request)

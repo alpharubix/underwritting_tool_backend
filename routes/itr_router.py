@@ -1,6 +1,7 @@
 from typing import Optional
 
-from controller.itr_controller.itr_analyzer_controller import get_r1xcrm_tax_calculation,get_r1xcrm_balance_sheet,get_r1xcrm_profit_and_loss_statement,get_r1xcrm_ratio_analysis
+from controller.itr_controller.itr_analyzer_controller import get_r1xcrm_tax_calculation, get_r1xcrm_balance_sheet, \
+    get_r1xcrm_profit_and_loss_statement, get_r1xcrm_ratio_analysis, export_itr_report
 from fastapi import APIRouter
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -57,3 +58,7 @@ async def ratio_analysis(request: Request,cust_id:Optional[str]=None)->JSONRespo
 @itr_router.get('/r1xcrm-ratio-analysis/{acc_id}')
 async def r1xcrm_ratio_analysis(request: Request, acc_id:int)->JSONResponse:
     return await get_r1xcrm_ratio_analysis(request,acc_id)
+
+@itr_router.get("/export-report")
+async def export_report(request: Request, cust_id:Optional[str]=None)->JSONResponse:
+    return await export_itr_report(request)

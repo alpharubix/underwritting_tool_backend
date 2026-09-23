@@ -1,9 +1,14 @@
+import os
+from copy import copy
 from fastapi.exceptions import HTTPException
 from fastapi  import BackgroundTasks, Query
 from json import JSONDecodeError
+import io
+from openpyxl import load_workbook
+from openpyxl.drawing.image import Image as XLImage
 from starlette import status
 from fastapi import APIRouter, UploadFile, File, Request, Form
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 from config.config import AllowedService, ServicePrice, WalletStatus, ServiceRequestStatus, UpstreamStatus,AnchorRole
 from controller.bsa_uploads import  bank_names,pdf_upload_consumer_v2
 from controller.crm_bsa_upload_controller import handle_bsa_upload_crm
@@ -24,6 +29,7 @@ from controller.bank_statement_report import get_available_bank_accounts
 from controller.individual_bank_statement_report import individual_overview_by_account,individual_eod_by_account,individual_loan_transaction_by_account
 import json
 from datetime import datetime
+import httpx
 
 
 ALLOWED_ROLES = ('ADMIN','ANCHOR','SUPER_ANCHOR')
@@ -502,4 +508,82 @@ async def account_details(request: Request):
 
 
     except Exception as e:
+        raise HTTPException(status_code=500,detail={"message":"Internal server error"})
+
+
+
+
+@bsa_router.post("/export-report")
+async def export_bsa_report(request: Request):
+    try:
+        db = request.app.state.mongo_db
+        input_body = await request.json()
+
+        if not input_body.get("account_number"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"message":"account number is required"})
+
+        url_doc : str = await db.bsa_merged_bankstatements.find_one({"account_details.Account Number": input_body.get("account_number")}, {"_id": 0,"source_url":1})
+
+        # find and replace json with xlsx
+
+        url = url_doc.get("source_url")
+
+        excel_url = url.replace("json","xlsx")
+
+
+        #make  a api call to the upstream service to get the excel file as bytes
+
+        async with httpx.AsyncClient() as client:
+            excel_response = await client.get(excel_url,headers={"clientId":os.getenv("CLIENT_ID"),"clientSecret":os.getenv("CLIENT_SECRET")})
+
+
+        if excel_response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,detail={"message":"Bad Gateway try again later"})
+
+        excel_bytes = excel_response.content
+
+        wb = load_workbook(io.BytesIO(excel_bytes))
+
+        PIXELS_TO_EMU = 9525
+
+        for ws in wb.worksheets:
+
+            if not ws._images:
+                continue
+
+            old_image = ws._images[0]
+
+            # Preserve the original position only
+            anchor = copy(old_image.anchor)
+
+            # Load your logo at its natural/original dimensions
+            new_image = XLImage("assets/r1xchange_logo_733x109_crisp.png")
+
+            # Don't set width/height again
+            new_image.anchor = copy(old_image.anchor)
+
+            ws._images.clear()
+            ws.add_image(new_image)
+
+        output = io.BytesIO()
+
+        wb.save(output)
+
+        output.seek(0)
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": 'attachment; filename="Bsa_analysis_report.xlsx"'
+            }
+        )
+
+    except JSONDecodeError as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"message":"Invalid JSON"})
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        print(e)
         raise HTTPException(status_code=500,detail={"message":"Internal server error"})
