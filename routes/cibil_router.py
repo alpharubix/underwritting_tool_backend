@@ -29,7 +29,7 @@ async def validate_otp(request: Request,cust_id:Optional[str]=None):
 
 @cibil_router.post("/resend-otp")
 async def resend_otp(request: Request,cust_id:Optional[str]=None):
-    return await resend_cibil_otp(request=request,cust_id=cust_id)
+    return await resend_cibil_otp(request=request)
 
 @cibil_router.get("/list-reports")
 async def list_reports(request: Request,cust_id:Optional[str]=None): 
