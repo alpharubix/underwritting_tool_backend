@@ -1241,7 +1241,7 @@ async def export_cibil_report(request):
         if wb.worksheets:
             wb.worksheets[-1].title = "CRISP ANALYSIS"
 
-        logo_path = "assets/r1xchange_logo_733x109_crisp.png"
+        logo_path = "assets/crisp_logo.png"
 
         for ws in wb.worksheets:
 

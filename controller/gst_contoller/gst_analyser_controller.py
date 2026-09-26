@@ -1165,7 +1165,7 @@ async def export_gst_report(request:Request):
             anchor = copy(old_image.anchor)
 
             # Load your logo at its natural/original dimensions
-            new_image = XLImage("assets/r1xchange_logo_733x109_crisp.png")
+            new_image = XLImage("assets/crisp_logo.png")
 
             # Don't set width/height again
             new_image.anchor = copy(old_image.anchor)

@@ -95,8 +95,8 @@ SCOREME_GST_OTP_ERROR_MAP = {
         "message": "OTP already sent. Please try again later."
     },
     "ERO038": {
-        "status_code": 500,
-        "message": "GST OTP generation unsuccessful."
+        "status_code": 412,
+        "message": "Please Enable Api access in Gst Portal."
     },
     "EAA049": {
         "status_code": 401,

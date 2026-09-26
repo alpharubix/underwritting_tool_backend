@@ -135,7 +135,7 @@ class WalletStatus(enum.Enum):
     RELEASED = "RELEASED"
 
 class ServicePrice(enum.Enum):
-    BSA = 479
+    BSA = 565
     ITR = 525
     GST = 561
     CIBIL =643
