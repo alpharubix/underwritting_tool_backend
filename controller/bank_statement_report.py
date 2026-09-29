@@ -2,11 +2,10 @@ import logging
 import time
 from json import JSONDecodeError
 
-from motor.motor_asyncio import AsyncIOMotorDatabase
 from fastapi import HTTPException
+from motor.motor_asyncio import AsyncIOMotorDatabase
 from starlette import status
 from starlette.responses import JSONResponse
-
 
 logger = logging.getLogger(__name__)
 
