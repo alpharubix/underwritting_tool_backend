@@ -25,7 +25,12 @@ async def authorization(request: Request, call_next):
             r"^/v1/bsa/r1xcrm-summary-of-debit-and-credit_monthwise/\d+$",
             r"^/v1/bsa/r1xcrm-cashflow/\d+$",
             r"^/v1/bsa/r1xcrm-month-wise-overview/\d+$",
+            r"^/v1/bsa/r1x-bank-accounts/\d+$",
+            r"^/v1/bsa/r1x-account-details/\d+$",
+            r"^/v1/bsa/individual/r1x-overview/\d+$",
+            r"^/v1/bsa/individual/r1x-eod-analysis/\d+$",
             r"^/v1/bsa/r1xcrm-report-date-range/\d+$",
+            r"^/v1/bsa/individual/r1x-loan-transactions/\d+$",
             r"^/v1/itr/r1xcrm-tax-calculation/\d+$",
             r"^/v1/itr/r1xcrm-balance_sheet/\d+$",
             r"^/v1/itr/r1xcrm-profit-and-loss-statement/\d+$",
@@ -47,35 +52,32 @@ async def authorization(request: Request, call_next):
             r"^/v1/auth/admin/login",
             r"^/v1/auth/anchor/login",
             r"^/v1/auth/create-super-admin",
-            r"^/v1/auth/anchor/login"
+            r"^/v1/auth/anchor/login",
         ]
 
-
         # Check if the current path matches any of our regex patterns
-        is_public = any(re.match(pattern, request.url.path) for pattern in public_patterns)
+        is_public = any(
+            re.match(pattern, request.url.path) for pattern in public_patterns
+        )
 
         if request.method == "OPTIONS" or is_public:
             return await call_next(request)
 
-        token = request.cookies.get('access_token')
+        token = request.cookies.get("access_token")
         if not token:
             return JSONResponse(
-                status_code=401,
-                content={"message": "Unauthorized Access"}
+                status_code=401, content={"message": "Unauthorized Access"}
             )
 
         try:
             decoded_jwt_token = get_decoded_jwt_token(token)
-            request.state.user_id = decoded_jwt_token['user_id']
-            request.state.role = decoded_jwt_token['role']
-            user= request.state.user_id
+            request.state.user_id = decoded_jwt_token["user_id"]
+            request.state.role = decoded_jwt_token["role"]
+            user = request.state.user_id
             print(f"User ID from middleware: {user}")
         except Exception:
-            return JSONResponse(status_code=401, content={'message': 'Invalid Token'})
+            return JSONResponse(status_code=401, content={"message": "Invalid Token"})
 
         return await call_next(request)
     except HTTPException as e:
-     raise e
-
-
-
+        raise e
