@@ -44,6 +44,7 @@ async def register_user(
     password = input_data.get('password')
     site_code = input_data.get('site_code')
     anchor_id = input_data.get('anchor_id')
+    consent = input_data.get("consent")
 
     try:
         user_collection = mongodb_database['users']
@@ -108,7 +109,8 @@ async def register_user(
 
         hashed_password = hash_password(password)
 
-        user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name,site_code=site_code,anchor_id=anchor_id)
+        user = get_user_dict(account_id,email_id, phone_no, company_name, gst_number, customer_name,site_code=site_code,consent=consent,anchor_id=anchor_id)
+
         auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
 
         await user_collection.insert_one(user)

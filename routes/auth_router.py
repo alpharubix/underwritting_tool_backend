@@ -11,13 +11,15 @@ async def register(request: Request,background_tasks: BackgroundTasks):
     try:
         input_payload = await request.json()
         print(input_payload)
+
         mandatory_fields = (
             "customer_name",
             "company_name",
             "phone_no",
             "email_id",
             "password",
-            "site_code"
+            "site_code",
+            "consent"
         )
 
         missing_fields = [ #condition for checking the mandatory fields from the input

@@ -1196,25 +1196,26 @@ async def export_gst_report(request:Request):
         raise HTTPException(status_code=500, detail={"message": "Internal server error"})
 
 
+async def write_gst_consent(request:Request):
+    try:
+        user_id = request.state.user_id
+        db = request.app.state.mongo_db
+        gst_consent_doc = await request.json()
+        created_at = datetime.now(timezone.utc)
+        gst_consent_doc["user_id"]= user_id
+        gst_consent_doc["created_at"] = created_at
+        
+        gst_consent_result = await db.gst_consent.insert_one(gst_consent_doc)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message":"GST consent given successfully",
+                "data":{
+                    "user_id":user_id,
+                    "inserted_id":gst_consent_result.inserted_id
+                }
+            }
+        )
+    except Exception as e:
+        raise e
