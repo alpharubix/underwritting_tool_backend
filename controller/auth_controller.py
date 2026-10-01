@@ -113,7 +113,7 @@ async def register_user(
 
         auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
 
-        await user_collection.insert_one(user)
+        user_result = await user_collection.insert_one(user)
         await auth_collection.insert_one(auth)
 
         # background_tasks.add_task(
@@ -121,10 +121,16 @@ async def register_user(
         #     email_id,
         #     {"name": company_name, "login_id": login_id, "password": password}
         # )
+        registration_user_id = str(user_result.inserted_id)
 
         return JSONResponse(
             status_code=201,
-            content={'message': 'User registration successful, please login to continue!'}
+            content={
+                'message': 'User registration successful, please login to continue!',
+                "data":{
+                    "user_id":registration_user_id
+                }
+            }
         )
     except Exception as e:
         print("Error while creating user 5pointcreditsupport:", str(e))

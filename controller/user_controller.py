@@ -122,9 +122,16 @@ async def update_current_user(user_id, body, mongodb_connection: AsyncIOMotorCli
 
 async def give_service_consent(request:Request,service:str):
     try:
-        user_id = request.state.user_id
         db = request.app.state.mongo_db
         service = service.lower()
+        user_id = request.state.user_id if service != "user_policy" else None
+
+        if user_id is None:
+            user = await request.json()
+            user_id = user["user_id"]
+            print("USer id ",user_id)
+
+
         ALLOWED_SERVICES={'gst','cibil','user_policy'}
 
         if service not in ALLOWED_SERVICES:
@@ -154,6 +161,8 @@ async def give_service_consent(request:Request,service:str):
                         }
                     }
                 )
+
+        
             consent_doc = {
                 "user_id":user_id,
                 "service":service,
@@ -178,8 +187,13 @@ async def give_service_consent(request:Request,service:str):
 async def check_service_consent(request:Request,service:str):
     try:
         db = request.app.state.mongo_db
-        user_id = request.state.user_id
+        user_id = request.state.user_id if service != "user_policy" else None
         ALLOWED_SERVICES={'gst','cibil','user_policy'}
+
+        if user_id is None:
+            user = await request.json()
+            user_id = user["user_id"]
+            print("USer id ",user_id)
 
         if service not in ALLOWED_SERVICES:
             return JSONResponse(
