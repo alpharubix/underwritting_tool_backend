@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
+
 from bson import ObjectId
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.responses import JSONResponse
 from starlette import status
@@ -117,4 +119,59 @@ async def update_current_user(user_id, body, mongodb_connection: AsyncIOMotorCli
             detail="Internal server error please contact admin for support"
         )
 
+
+async def give_service_consent(request:Request,service:str):
+    try:
+        user_id = request.state.user_id
+        db = request.app.state.mongo_db
+        service = service.lower()
+        ALLOWED_SERVICES={'gst','cibil','user_policy'}
+
+        if service not in ALLOWED_SERVICES:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message":"Invalid service for the consent . Please give valid service"
+                }
+            )
+        else:
+
+            #check for already given consents :
+
+            existing_consent = await db.user_policy_service_consents.find_one({
+                "user_id":user_id,
+                "service":service
+            })
+
+            if existing_consent:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "message":"Consent is already given by the user",
+                        "data":{
+                            "consent":True,
+                            "service":service
+                        }
+                    }
+                )
+            consent_doc = {
+                "user_id":user_id,
+                "service":service,
+                "created_at":datetime.now(timezone.utc),
+                "consent":True
+            }
+            consent_result = await db.user_policy_service_consents.insert_one(consent_doc)
+
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content={
+                    "message":"Consent given successfully",
+                    "data":{
+                        "user_id":user_id,
+                        "service":service
+                    }
+                }
+            )
+    except Exception as e:
+        raise e
 

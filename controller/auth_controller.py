@@ -44,7 +44,8 @@ async def register_user(
     password = input_data.get('password')
     site_code = input_data.get('site_code')
     anchor_id = input_data.get('anchor_id')
-    consent = input_data.get("consent")
+    consent = bool(input_data.get("consent"))
+
 
     try:
         user_collection = mongodb_database['users']
