@@ -193,7 +193,7 @@ async def check_service_consent(request:Request,service:str):
         if user_id is None:
             user = await request.json()
             user_id = user["user_id"]
-            print("USer id ",user_id)
+            print("User id ",user_id)
 
         if service not in ALLOWED_SERVICES:
             return JSONResponse(
