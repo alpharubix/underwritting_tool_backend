@@ -128,7 +128,7 @@ async def give_service_consent(request:Request,service:str):
 
         if user_id is None:
             user = await request.json()
-            user_id = user["user_id"]
+            user_id = user.get("user_id")
             print("USer id ",user_id)
 
 
@@ -203,6 +203,7 @@ async def check_service_consent(request:Request,service:str):
                 }
             )
         else:
+
             consent = await db.user_policy_service_consents.find_one({
                 "user_id":user_id,
                 "service":service
