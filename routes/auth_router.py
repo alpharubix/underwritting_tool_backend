@@ -18,8 +18,7 @@ async def register(request: Request,background_tasks: BackgroundTasks):
             "phone_no",
             "email_id",
             "password",
-            "site_code",
-            "consent"
+            "site_code"
         )
 
         missing_fields = [ #condition for checking the mandatory fields from the input
