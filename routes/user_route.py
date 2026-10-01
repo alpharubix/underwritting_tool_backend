@@ -38,6 +38,6 @@ async def update_current_user_route(request:Request,body: UpdateUserRequest):
 async def give_consent_route(request:Request,service:str):
     return await give_service_consent(request=request,service=service)
 
-@user_router.get("/check-consent/{service}")
+@user_router.post("/check-consent/{service}")
 async def check_consent_route(request:Request,service:str):
     return await check_service_consent(request,service)

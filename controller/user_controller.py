@@ -208,7 +208,6 @@ async def check_service_consent(request:Request,service:str):
                 "service":service
             })
 
-
             if not consent:
                 return JSONResponse(
                     status_code=status.HTTP_200_OK,
@@ -224,7 +223,7 @@ async def check_service_consent(request:Request,service:str):
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={
-                    "message":"Consent given for the service",
+                    "message":"Consent is given for the service",
                     "data":{
                         "consent":True,
                         "service":service
