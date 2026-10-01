@@ -175,7 +175,7 @@ def build_bsa_report_mail_body(
                 <td style="background:#F9FAFB;padding:18px 36px;border-top:1px solid #E5E7EB;
                             text-align:center;">
                   <p style="margin:0;font-size:12px;color:#9CA3AF;">
-                    © 2025 5PointCredit · Mera Merchant · This is an automated notification.
+                    ©  2026 5PointCredit · Mera Merchant · This is an automated notification.
                   </p>
                 </td>
               </tr>

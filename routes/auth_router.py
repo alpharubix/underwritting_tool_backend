@@ -11,6 +11,7 @@ async def register(request: Request,background_tasks: BackgroundTasks):
     try:
         input_payload = await request.json()
         print(input_payload)
+
         mandatory_fields = (
             "customer_name",
             "company_name",

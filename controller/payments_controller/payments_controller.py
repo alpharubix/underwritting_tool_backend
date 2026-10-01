@@ -47,6 +47,7 @@ async def get_create_order(request: Request):
         }
 
         async with httpx.AsyncClient() as client:
+            print("Going for the payment")
             response = await client.post(
                 url,
                 json=payload,
@@ -55,6 +56,7 @@ async def get_create_order(request: Request):
                     os.getenv("RAZORPAY_KEY_SECRET"),
                 ),
             )
+            print("Response after async client ",response.json())
         if response.status_code == 200:
             razor_pay_order = response.json()
 
