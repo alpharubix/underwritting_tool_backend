@@ -3,7 +3,7 @@ from http.client import HTTPException
 from fastapi import APIRouter
 from starlette.requests import Request
 from controller.user_controller import get_current_user
-from controller.user_controller import update_current_user,give_service_consent
+from controller.user_controller import update_current_user,give_service_consent,check_service_consent
 from pydantic import BaseModel
 
 class UpdateUserRequest(BaseModel):
@@ -38,3 +38,6 @@ async def update_current_user_route(request:Request,body: UpdateUserRequest):
 async def give_consent(request:Request,service:str):
     return await give_service_consent(request=request,service=service)
 
+@user_router.get("/check-consent/{service}")
+async def check_consent(request:Request,service:str):
+    return await check_service_consent(request,service)

@@ -175,3 +175,47 @@ async def give_service_consent(request:Request,service:str):
     except Exception as e:
         raise e
 
+async def check_service_consent(request:Request,service:str):
+    try:
+        db = request.app.state.mongo_db
+        user_id = request.state.user_id
+        ALLOWED_SERVICES={'gst','cibil','user_policy'}
+
+        if service not in ALLOWED_SERVICES:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message":"Invalid service for checking the consent"
+                }
+            )
+        else:
+            consent = await db.user_policy_service_consents.find_one({
+                "user_id":user_id,
+                "service":service
+            })
+
+
+            if not consent:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "message":"Consent is not given for the service",
+                        "data":{
+                            "service":service,
+                            "consent":False
+                        }
+                    }
+                )
+
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "message":"Consent given for the service",
+                    "data":{
+                        "consent":True,
+                        "service":service
+                    }
+                }
+            )
+    except Exception as e:
+        raise e
