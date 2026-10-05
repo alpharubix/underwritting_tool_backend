@@ -124,16 +124,26 @@ async def give_service_consent(request:Request,service:str):
     try:
         db = request.app.state.mongo_db
         service = service.lower()
-        user_id = request.state.user_id if service != "user_policy" else None
+        # input_body = await request.json()
+        # if service == "user_policy":
+        #     if input_body.get("user_id"):
+        #         user_id = input_body.get("user_id")
+        #     else:
+        #         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"user_id is required"})
+        # else:
+        #     user_id = request.state.user_id
 
-        if user_id is None:
-            user = await request.json()
-            user_id = user.get("user_id")
-            print("USer id ",user_id)
+        # user_id = request.state.user_id if service != "user_policy" else None
 
 
-        ALLOWED_SERVICES={'gst','cibil','user_policy'}
+        # if user_id is None:
+        #     user = await request.json()
+        #     user_id = user.get("user_id")
+        #     print("USer id ",user_id)
 
+
+        ALLOWED_SERVICES={'gst','cibil'}
+        user_id = request.state.user_id
         if service not in ALLOWED_SERVICES:
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -147,7 +157,8 @@ async def give_service_consent(request:Request,service:str):
 
             existing_consent = await db.user_policy_service_consents.find_one({
                 "user_id":user_id,
-                "service":service
+                "service":service,
+                "consent":True
             })
 
             if existing_consent:

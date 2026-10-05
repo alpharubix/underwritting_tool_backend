@@ -44,11 +44,11 @@ async def register_user(
     password = input_data.get('password')
     site_code = input_data.get('site_code')
     anchor_id = input_data.get('anchor_id')
-    
-
+    consent = input_data.get('consent', False)
     try:
         user_collection = mongodb_database['users']
         auth_collection = mongodb_database['auth']
+        user_policy_service_agreement_col = mongodb_database['user_policy_service_consents']
         user = await user_collection.find_one({'phone': phone_no})
 
         if user:
@@ -113,8 +113,17 @@ async def register_user(
 
         auth = get_auth_dict(user.get("_id"), hashed_password,email_id)
 
+        #get the user_id
+        user_id = str(auth.get("user_id"))
         user_result = await user_collection.insert_one(user)
         await auth_collection.insert_one(auth)
+
+        await user_policy_service_agreement_col.insert_one({
+            "user_id": user_id,
+            "consent": consent,
+            "service":"user_policy",
+            "created_at": datetime.now(timezone.utc)
+        })
 
         # background_tasks.add_task(
         #     send_registration_mail_to_user,
@@ -122,6 +131,7 @@ async def register_user(
         #     {"name": company_name, "login_id": login_id, "password": password}
         # )
         registration_user_id = str(user_result.inserted_id)
+
 
         return JSONResponse(
             status_code=201,
