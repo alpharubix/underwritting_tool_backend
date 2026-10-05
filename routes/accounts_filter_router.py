@@ -58,7 +58,7 @@ MODULE_CONFIG = {
         "fields": ["user_id", "from_date", "to_date", "created_at"],
         "period_from_field": "from_date",
         "period_to_field": "to_date",
-        "period_type": "date",  # real Mongo Date, e.g. 2025-08-01T00:00:00Z
+        "period_type": "date",  # real Mongo Date, e.g.  2026-08-01T00:00:00Z
         "created_at_field": "created_at",
     },
     "gst": {
@@ -73,7 +73,7 @@ MODULE_CONFIG = {
         ],
         "period_from_field": "from_month",
         "period_to_field": "to_month",
-        "period_type": "month_string",  # 'MMYYYY' string, e.g. "012025"
+        "period_type": "month_string",  # 'MMYYYY' string, e.g. "01 2026"
         "created_at_field": "webhook_received_time",
     },
     "itr": {
@@ -223,7 +223,7 @@ async def get_accounts_filter(
             }
 
         # --- period filter: ONE call covers bsa / gst / itr; cibil returns {} ---
-        # from_date=2025-01&to_date=2025-12 -> Jan 2025 through the last day of Dec 2025
+        # from_date= 2026-01&to_date= 2026-12 -> Jan  2026 through the last day of Dec  2026
         mod_from_date = request.query_params.get(f"{module_key}_from_date", from_date)
         mod_to_date = request.query_params.get(f"{module_key}_to_date", to_date)
         parsed_from = parse_date(mod_from_date)

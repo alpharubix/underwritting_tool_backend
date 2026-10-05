@@ -1,5 +1,7 @@
+from datetime import datetime, timezone
+
 from bson import ObjectId
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.responses import JSONResponse
 from starlette import status
@@ -118,3 +120,126 @@ async def update_current_user(user_id, body, mongodb_connection: AsyncIOMotorCli
         )
 
 
+async def give_service_consent(request:Request,service:str):
+    try:
+        db = request.app.state.mongo_db
+        service = service.lower()
+        # input_body = await request.json()
+        # if service == "user_policy":
+        #     if input_body.get("user_id"):
+        #         user_id = input_body.get("user_id")
+        #     else:
+        #         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"user_id is required"})
+        # else:
+        #     user_id = request.state.user_id
+
+        # user_id = request.state.user_id if service != "user_policy" else None
+
+
+        # if user_id is None:
+        #     user = await request.json()
+        #     user_id = user.get("user_id")
+        #     print("USer id ",user_id)
+
+        ALLOWED_SERVICES={'gst','cibil'}
+        user_id = request.state.user_id
+        if service not in ALLOWED_SERVICES:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message":"Invalid service for the consent . Please give valid service"
+                }
+            )
+        else:
+
+            #check for already given consents :
+
+            existing_consent = await db.user_policy_service_consents.find_one({
+                "user_id":user_id,
+                "service":service,
+                "consent":True
+            })
+
+            if existing_consent:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "message":"Consent is already given by the user",
+                        "data":{
+                            "consent":True,
+                            "service":service
+                        }
+                    }
+                )
+
+        
+            consent_doc = {
+                "user_id":user_id,
+                "service":service,
+                "created_at":datetime.now(timezone.utc),
+                "consent":True
+            }
+            consent_result = await db.user_policy_service_consents.insert_one(consent_doc)
+
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content={
+                    "message":"Consent given successfully",
+                    "data":{
+                        "user_id":user_id,
+                        "service":service
+                    }
+                }
+            )
+    except Exception as e:
+        raise e
+
+async def check_service_consent(request:Request,service:str):
+    try:
+        db = request.app.state.mongo_db
+        user_id = request.state.user_id if service != "user_policy" else None
+        ALLOWED_SERVICES={'gst','cibil','user_policy'}
+
+        if user_id is None:
+            user = await request.json()
+            user_id = user.get("user_id")
+            print("User id ",user_id)
+
+        if service not in ALLOWED_SERVICES:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message":"Invalid service for checking the consent"
+                }
+            )
+        else:
+
+            consent = await db.user_policy_service_consents.find_one({
+                "user_id":user_id,
+                "service":service
+            })
+
+            if not consent:
+                return JSONResponse(
+                    status_code=status.HTTP_200_OK,
+                    content={
+                        "message":"Consent is not given for the service",
+                        "data":{
+                            "service":service,
+                            "consent":False
+                        }
+                    }
+                )
+
+            return JSONResponse(
+                status_code=status.HTTP_202_ACCEPTED,
+                content={
+                    "message":"Consent is given for the service",
+                    "data":{
+                        "consent":True,
+                        "service":service
+                    }
+                }
+            )
+    except Exception as e:
+        raise e
