@@ -52,9 +52,8 @@ async def authorization(request: Request, call_next):
             r"^/v1/auth/admin/login",
             r"^/v1/auth/anchor/login",
             r"^/v1/auth/create-super-admin",
-            r"^/v1/auth/anchor/login",
-            r"^/v1/user/give-consent/user_policy",
-            r"^/v1/user/check-consent/user_policy"
+            r"^/v1/auth/anchor/login",  
+        
         ]
 
         # Check if the current path matches any of our regex patterns
