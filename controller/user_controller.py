@@ -141,7 +141,6 @@ async def give_service_consent(request:Request,service:str):
         #     user_id = user.get("user_id")
         #     print("USer id ",user_id)
 
-
         ALLOWED_SERVICES={'gst','cibil'}
         user_id = request.state.user_id
         if service not in ALLOWED_SERVICES:
