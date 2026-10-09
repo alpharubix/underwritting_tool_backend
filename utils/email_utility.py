@@ -204,7 +204,7 @@ def create_body_for_password_reset(otp):
     If you did not request this, please ignore this email.
 
     Regards,  
-    Team 5PointCredit
+    Team CRISP
     """
 
 def build_gst_email_body(user_name,reference_id):
