@@ -91,7 +91,6 @@ async def authorization(request: Request, call_next):
             request.state.role = decoded_jwt_token["role"]
             user = request.state.user_id
             print(f"User ID from middleware: {user}")
-            # print(f"Role from middleware : ",request.state.role)
 
         except Exception:
             return JSONResponse(status_code=401, content={"message": "Invalid Token"})
