@@ -662,7 +662,7 @@ async def get_available_bank_accounts(request,cust_id):
             },
             {
                 "_id": 0,
-                "last_merged_reference_id": 1,
+                "merged_reference_id": 1,
                 "account_details.Bank Name": 1
             }
         ).to_list(None)
@@ -678,7 +678,7 @@ async def get_available_bank_accounts(request,cust_id):
         reference_id_list = []
 
         for doc in docs:
-            reference_id = doc.get("last_merged_reference_id")
+            reference_id = doc.get("merged_reference_id")[0]
 
             if reference_id:
                 reference_id_list.append(reference_id)

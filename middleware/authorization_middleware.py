@@ -72,10 +72,26 @@ async def authorization(request: Request, call_next):
 
         try:
             decoded_jwt_token = get_decoded_jwt_token(token)
+
+            #check for the role and X-Client-Portal for matching
+            x_client_portal = request.headers.get("X-Client-Portal")
+
+            if x_client_portal is None:
+                return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
+
+            if x_client_portal == "anchor" and decoded_jwt_token["role"] == "user":
+                return JSONResponse(
+                    status_code=403, content={"message": "Forbidden Access"}
+                )
+            elif x_client_portal == "user" and decoded_jwt_token["role"] == "anchor":
+                return JSONResponse(
+                    status_code=403, content={"message": "Forbidden Access"}
+                )
             request.state.user_id = decoded_jwt_token["user_id"]
             request.state.role = decoded_jwt_token["role"]
             user = request.state.user_id
             print(f"User ID from middleware: {user}")
+
         except Exception:
             return JSONResponse(status_code=401, content={"message": "Invalid Token"})
 
