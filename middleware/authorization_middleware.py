@@ -79,11 +79,11 @@ async def authorization(request: Request, call_next):
             if x_client_portal is None:
                 return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
 
-            if x_client_portal == "ANCHOR" and decoded_jwt_token["role"] == "user":
+            if x_client_portal in "ANCHOR"and decoded_jwt_token["role"] == "user":
                 return JSONResponse(
                     status_code=403, content={"message": "Forbidden Access"}
                 )
-            elif x_client_portal == "user" and decoded_jwt_token["role"] == "ANCHOR":
+            elif x_client_portal == "user" and decoded_jwt_token["role"] in ("ANCHOR","SUPER_ANCHOR"):
                 return JSONResponse(
                     status_code=403, content={"message": "Forbidden Access"}
                 )
