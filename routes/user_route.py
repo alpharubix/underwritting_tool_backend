@@ -1,5 +1,4 @@
 from http.client import HTTPException
-
 from fastapi import APIRouter
 from starlette.requests import Request
 from controller.user_controller import get_current_user

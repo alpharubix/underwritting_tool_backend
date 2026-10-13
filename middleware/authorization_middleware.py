@@ -64,29 +64,32 @@ async def authorization(request: Request, call_next):
         if request.method == "OPTIONS" or is_public:
             return await call_next(request)
 
-        token = request.cookies.get("access_token")
-        if not token:
-            return JSONResponse(
-                status_code=401, content={"message": "Unauthorized Access"}
-            )
-
         try:
-            decoded_jwt_token = get_decoded_jwt_token(token)
 
-            # #check for the role and X-Client-Portal for matching
-            # x_client_portal = request.headers.get("X-Client-Portal")
-            #
-            # if x_client_portal is None:
-            #     return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
-            #
-            # if x_client_portal in "ANCHOR"and decoded_jwt_token["role"] == "user":
-            #     return JSONResponse(
-            #         status_code=403, content={"message": "Forbidden Access"}
-            #     )
-            # elif x_client_portal == "user" and decoded_jwt_token["role"] in ("ANCHOR","SUPER_ANCHOR"):
-            #     return JSONResponse(
-            #         status_code=403, content={"message": "Forbidden Access"}
-            #)
+            #check for the role and X-Client-Portal for matching
+            x_client_portal = request.headers.get("X-Client-Portal")
+
+            if x_client_portal is None:
+                return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
+
+            if x_client_portal == "user":
+
+                user_access_token = request.cookies.get("user_access_token")
+                if not user_access_token:
+                    return JSONResponse(
+                        status_code=401, content={"message": "Unauthorized Access"}
+                    )
+                decoded_jwt_token = get_decoded_jwt_token(user_access_token)
+
+            if x_client_portal in ("ANCHOR","SUPER_ANCHOR"):
+                anchor_access_token = request.cookies.get("anchor_access_token")
+
+                if not anchor_access_token:
+                    return JSONResponse(
+                        status_code=401, content={"message": "Unauthorized Access"}
+                    )
+                decoded_jwt_token = get_decoded_jwt_token(anchor_access_token)
+
             request.state.user_id = decoded_jwt_token["user_id"]
             request.state.role = decoded_jwt_token["role"]
             user = request.state.user_id
@@ -96,5 +99,6 @@ async def authorization(request: Request, call_next):
             return JSONResponse(status_code=401, content={"message": "Invalid Token"})
 
         return await call_next(request)
+
     except HTTPException as e:
         raise e
