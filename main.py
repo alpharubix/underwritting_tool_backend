@@ -55,7 +55,7 @@ async def connect_to_databases(app: FastAPI): #database first approch
         yield
     except Exception as e:
         print("Error connecting to databases",e)
-        raise
+        raise 
 
 
 app = FastAPI(lifespan=connect_to_databases)

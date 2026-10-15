@@ -218,6 +218,7 @@ async def user_logout(request):
 
     response = JSONResponse(status_code=status.HTTP_200_OK, content={"message":"Logout successful"})
 
+    print("X-Client-Portal header value:", x_client_portal)
     if x_client_portal == "user":
         token_key = "user_access_token"
 
