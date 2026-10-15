@@ -194,7 +194,7 @@ async def user_login(mongodb_connection, input_data: dict):
             value=token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             path="/")
 
         return response
@@ -842,7 +842,7 @@ async def anchor_login(request: Request):
             value=token,
             httponly=True,
             secure=True,
-            samesite="lax",
+            samesite="none",
             path="/")
 
         return response
