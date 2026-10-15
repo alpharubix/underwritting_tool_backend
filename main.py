@@ -51,11 +51,11 @@ async def connect_to_databases(app: FastAPI): #database first approch
         app.state.mongo_db  = mongo_db
         app.state.postgres_conn = postgres_conn
         print('database connected successfully')
-        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
+        # asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
-        raise
+        raise 
 
 
 app = FastAPI(lifespan=connect_to_databases)

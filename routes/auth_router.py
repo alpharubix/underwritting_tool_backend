@@ -58,9 +58,9 @@ async def login(request: Request):
 
 
 @auth_router.post("/logout")
-async def logout():
+async def logout(request:Request):
     try:
-        return await user_logout()
+        return await user_logout(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error please contact the administrator")
 

@@ -68,7 +68,7 @@ async def authorization(request: Request, call_next):
 
             #check for the role and X-Client-Portal for matching
             x_client_portal = request.headers.get("X-Client-Portal")
-
+            print("X-Client-Portal header value:", x_client_portal)
             if x_client_portal is None:
                 return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
 
@@ -80,6 +80,7 @@ async def authorization(request: Request, call_next):
                         status_code=401, content={"message": "Unauthorized Access"}
                     )
                 decoded_jwt_token = get_decoded_jwt_token(user_access_token)
+                print("Decoded JWT Token:", decoded_jwt_token)
 
             if x_client_portal in ("ANCHOR","SUPER_ANCHOR"):
                 anchor_access_token = request.cookies.get("anchor_access_token")
@@ -89,6 +90,7 @@ async def authorization(request: Request, call_next):
                         status_code=401, content={"message": "Unauthorized Access"}
                     )
                 decoded_jwt_token = get_decoded_jwt_token(anchor_access_token)
+                print("Decoded JWT Token:", decoded_jwt_token)
 
             request.state.user_id = decoded_jwt_token["user_id"]
             request.state.role = decoded_jwt_token["role"]
