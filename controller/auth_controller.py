@@ -190,7 +190,7 @@ async def user_login(mongodb_connection, input_data: dict):
         )
 
         response.set_cookie(
-            key="access_token",
+            key="user_access_token",
             value=token,
             httponly=True,
             secure=True,
@@ -209,10 +209,26 @@ async def user_login(mongodb_connection, input_data: dict):
             detail="Internal server error contact admin for support"
         )
 
-async def user_logout():
+async def user_logout(request):
+
+    x_client_portal = request.headers.get("X-Client-Portal")
+
+    if not x_client_portal:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"X-Client-Portal header not provided"})
+
     response = JSONResponse(status_code=status.HTTP_200_OK, content={"message":"Logout successful"})
+
+    if x_client_portal == "user":
+        token_key = "user_access_token"
+
+    elif x_client_portal in ("ANCHOR","SUPER_ANCHOR"):
+        token_key = "anchor_access_token"
+
+    else:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,content={"message":"Invalid X-Client-Portal provided"})
+
     response.delete_cookie(
-        key="access_token",
+        key=token_key,
         path="/",
         httponly=True,
         secure=True,  # only if using HTTPS
@@ -821,7 +837,7 @@ async def anchor_login(request: Request):
         )
 
         response.set_cookie(
-            key="access_token",
+            key="anchor_access_token",
             value=token,
             httponly=True,
             secure=True,
