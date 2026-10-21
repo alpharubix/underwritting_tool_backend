@@ -662,7 +662,7 @@ async def login_admin(request:Request):
                     )
     
             response.set_cookie(
-                        key="access_token",
+                        key="user_access_token",
                         value=token,
                         httponly=True,
                         secure=True,
@@ -1234,10 +1234,14 @@ async def anchor_create_user(request:Request,_id:str=None):
 async def create_bank(request:Request):
     try:
         db = request.app.state.mongo_db 
+        user_access_token = request.cookies.get("user_access_token")
+
+        print("Cookie received:", bool(user_access_token))
         body = await request.json()
+        
         requester_role = request.state.role
 
-        if requester_role!="SUPER_ADMIN":
+        if requester_role!="SUPER_ADMIN" and request.cookies.get("user_access_token") is None:
             return JSONResponse(
                 content={"message":"Forbidden access !"},
                 status_code=status.HTTP_403_FORBIDDEN
@@ -1251,7 +1255,7 @@ async def create_bank(request:Request):
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         else:
-            client = request.app.state.mongo_client
+            client = db.client
             hashed_password = hash_password(password=password)
             try:
                 async with await client.start_session() as session:
@@ -1297,3 +1301,57 @@ async def create_bank(request:Request):
                 raise e
     except Exception as e:
         raise e
+    
+
+async def login_bank(request:Request):
+    try:
+        db = request.app.state.mongo_db
+        body = await request.json()
+
+        username = body.get("username")
+        password = body.get("password")
+
+        
+        if not username or not password:
+            return JSONResponse(
+                content={"message":"Please provide the required credentials"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        if not is_password_valid(password):
+            return JSONResponse(
+                content={"message":"Password does not meet the required criteria"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        bank_auth = await db.bank_auth.find_one({"username":username})
+
+        if not bank_auth:
+            return JSONResponse(
+                content={"message":"Invalid credentials"},
+                status_code=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token = create_access_token({
+            "user_id": str(bank_auth["_id"]),
+            "role": "BANK"
+        })
+    
+        response = JSONResponse(
+            content={"success":True,"message":"Login successful"},
+            status_code=status.HTTP_200_OK
+        )
+
+        response.set_cookie(
+            key="bank_access_token",
+            value=token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            path="/"
+        )
+        return response
+    except Exception as e:
+        print("Error in login_bank:", e)
+        return JSONResponse(
+            content={"message":"Internal server error contact admin for support"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
