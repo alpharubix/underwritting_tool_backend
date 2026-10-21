@@ -61,6 +61,7 @@ async def upload_bsa(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(None),
     data: str = Form(None),  # This will be the JSON string of your data block
+    cust_id: str | None = Query(default=None), # Optional customer ID
 ):
     # Convert string back to dictionary
     try:
@@ -71,7 +72,13 @@ async def upload_bsa(
             )
 
         data_params = json.loads(data)
+        print("Query cust_id:", cust_id)
+        print("Data params before:", data_params)
 
+        if cust_id:
+            data_params["cust_id"] = cust_id
+
+        print("Data params after:", data_params)
         if data_params.get("filePassword"):
             password = data_params["filePassword"]
 

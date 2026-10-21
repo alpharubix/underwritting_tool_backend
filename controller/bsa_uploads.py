@@ -219,12 +219,14 @@ async def bank_names():
 async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_task,data_params):
     try:
         required_fields = ["accountNumber", "entityType", "accountType", "bankCode"] #madatory input fields
-
+        
         user_id = request.state.user_id
         requester_role = request.state.role
         cust_id = data_params.get("cust_id")
 
         if requester_role in ALLOWED_ROLES:
+            print("Requester role is allowed:", requester_role)
+            print("Customer ID from data_params:", cust_id)
             print("Checked allowed roles")
             if not cust_id:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer ID is requried")
