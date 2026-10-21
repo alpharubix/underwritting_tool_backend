@@ -4,7 +4,7 @@ from starlette.requests import Request
 from json.decoder import JSONDecodeError
 from utils.auth_utility import is_password_valid
 auth_router = APIRouter(prefix="/v1/auth")
-from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,dashboard_admins,update_admin,create_super_admin,create_super_anchor,anchor_login,create_anchor,anchor_create_user
+from controller.auth_controller import register_user, user_login, user_logout, user_reset_password,forget_password,validate_forgot_password_otp,reset_password_,check_r1xchange_account_controller,create_admin,login_admin,dashboard_admins,update_admin,create_super_admin,create_super_anchor,anchor_login,create_anchor,anchor_create_user,create_bank
 
 @auth_router.post("/register")
 async def register(request: Request,background_tasks: BackgroundTasks):
@@ -162,3 +162,7 @@ async def anchor_create_user_route(request:Request,_id:str=None):
 # @auth_router.post("/admin/create-user")
 # async def create_user_route(request:Request):
 #     return await admin_create_user(request)
+
+@auth_router.post('/bank/create')
+async def create_bank_route(request:Request)
+    return await create_bank(request)

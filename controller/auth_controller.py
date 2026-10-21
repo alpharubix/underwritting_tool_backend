@@ -1231,3 +1231,69 @@ async def anchor_create_user(request:Request,_id:str=None):
             
         )
         
+async def create_bank(request:Request):
+    try:
+        db = request.app.state.mongo_db 
+        body = await request.json()
+        requester_role = request.state.role
+
+        if requester_role!="SUPER_ADMIN":
+            return JSONResponse(
+                content={"message":"Forbidden access !"},
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        username = body.get("username")
+        password = body.get("password")
+
+        if not username or not password:
+            return JSONResponse(
+                content={"message":"Please submit required credentials"},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+        else:
+            client = request.app.state.mongo_client
+            hashed_password = hash_password(password=password)
+            try:
+                async with await client.start_session() as session:
+                    async with session.start_transaction():
+                        user_id = request.state.user_id
+                        #bank_auth creation
+                        bank_result = await db.bank_auth.insert_one({
+                            "username":username,
+                            "password":hashed_password,
+                            "created_by":user_id,
+                            "created_at":datetime.now(timezone.utc)
+                        },session=session)
+
+                        if not bank_result.inserted_id or not bank_result.acknowledged:
+                            return JSONResponse(
+                                content={"message":"Failed to create the bank auth credentials . [bank_auth] col error"},
+                                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                            )
+
+                        auth_result = await db.auth.insert_one({
+                            "user_id":username,
+                            "password_hash":hashed_password,
+                            "password_changed_at":datetime.now(timezone.utc)
+                            
+                        },session=session)
+
+                        if not auth_result.acknowledged or not auth_result.inserted_id :
+                            return JSONResponse(
+                                content={"message":"Failed to create auth credentials"},
+                                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                            )
+                        return JSONResponse(
+                            status_code=status.HTTP_201_CREATED,
+                            content={
+                                "message":"Successfully created the bank credentials | Please find the credentials below",
+                                "data":{
+                                    "username":username,
+                                    "password":password,
+                                }
+                            }
+                        )
+            except Exception as e:
+                raise e
+    except Exception as e:
+        raise e
