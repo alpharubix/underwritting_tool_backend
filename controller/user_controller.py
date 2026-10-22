@@ -243,3 +243,29 @@ async def check_service_consent(request:Request,service:str):
             )
     except Exception as e:
         raise e
+
+
+async def check_users_with_all_analyzed_reports(request:Request):
+
+    db = request.app.state.mongo_db 
+
+    users = await db.auth.find(
+        {},
+        {"_id": 0, "user_id": 1}
+    ).to_list(length=None)  
+
+    users = [str(user["user_id"]) for user in users if isinstance(user.get("user_id"), ObjectId)]
+
+    users_with_all_reports = []
+    for user in users:
+        bsa_found = await db.bsa_merged_bankstatements.find_one({"user_id":user})
+        gst_found = await db.gst_analyzed_report.find_one({"user_id":user})
+        itr_found = await db.itr_analyzed_report.find_one({"user_id":user})
+        cibil_found = await db.cibil_report.find_one({"user_id":user})
+
+        if bsa_found and gst_found and itr_found and cibil_found:
+            users_with_all_reports.append(user)
+
+    return users_with_all_reports   
+
+    
