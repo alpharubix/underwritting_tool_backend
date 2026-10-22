@@ -21,8 +21,8 @@ async def register(request: Request,background_tasks: BackgroundTasks):
             "site_code",
             "consent"
         )
-        requester_role = request.state.role
-        if requester_role!='user':
+        x_client_portal = request.headers('X-Client-Portal')
+        if x_client_portal!='ANCHOR':
             mandatory_fields = tuple(
             field for field in mandatory_fields
             if field != "consent"
