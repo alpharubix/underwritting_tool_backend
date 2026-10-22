@@ -28,6 +28,7 @@ SCOREME_BSA__ERROR_MAP = {
     "ENI004": (status.HTTP_404_NOT_FOUND, "No Information Found."),
     "EUP007": (status.HTTP_500_INTERNAL_SERVER_ERROR, "Unable To Process. Please Reach Out To Support."),
     "EUF059": (status.HTTP_422_UNPROCESSABLE_CONTENT, "The uploaded file does not meet the criteria.Please upload digital PDF file."),
+    "EFC1680":(status.HTTP_400_BAD_REQUEST,"The files in the request are detected to have some unauthorized changes"),
 }
 
 
