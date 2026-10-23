@@ -61,6 +61,7 @@ async def upload_bsa(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(None),
     data: str = Form(None),  # This will be the JSON string of your data block
+    cust_id = str | None = None
 ):
     # Convert string back to dictionary
     try:
