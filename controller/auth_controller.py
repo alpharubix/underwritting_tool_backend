@@ -662,7 +662,7 @@ async def login_admin(request:Request):
                     )
     
             response.set_cookie(
-                        key="access_token",
+                        key="admin_access_token",
                         value=token,
                         httponly=True,
                         secure=True,
