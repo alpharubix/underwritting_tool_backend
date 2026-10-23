@@ -222,7 +222,6 @@ async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_tas
 
         user_id = request.state.user_id
         requester_role = request.state.role
-        # cust_id = data_params.get("cust_id")
 
         if requester_role in ALLOWED_ROLES:
             print(f"{requester_role} role is using this ")

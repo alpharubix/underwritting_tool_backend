@@ -55,13 +55,13 @@ ALLOWED_ROLES = ("ADMIN", "ANCHOR", "SUPER_ANCHOR")
 bsa_router = APIRouter(prefix="/v1/bsa", tags=["BSA"])
 
 
-@bsa_router.post("/upload")
+@bsa_router.post("/upload/{cust_id}")
 async def upload_bsa(
     request: Request,
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(None),
     data: str = Form(None),  # This will be the JSON string of your data block
-    cust_id : str | None = None
+    cust_id:str=None,
 ):
     # Convert string back to dictionary
     try:
