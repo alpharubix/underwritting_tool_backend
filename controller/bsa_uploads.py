@@ -224,7 +224,7 @@ async def pdf_upload_consumer_v2(request,files,mongodb_connection,background_tas
         requester_role = request.state.role
 
         if requester_role in ALLOWED_ROLES:
-            print("Checked allowed roles")
+            print(f"{requester_role} role is using this ")
             if not cust_id:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer ID is requried")
             user_id = cust_id
