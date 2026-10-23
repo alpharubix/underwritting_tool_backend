@@ -55,7 +55,7 @@ ALLOWED_ROLES = ("ADMIN", "ANCHOR", "SUPER_ANCHOR")
 bsa_router = APIRouter(prefix="/v1/bsa", tags=["BSA"])
 
 
-@bsa_router.post("/upload/{cust_id}")
+@bsa_router.post("/upload")
 async def upload_bsa(
     request: Request,
     background_tasks: BackgroundTasks,
