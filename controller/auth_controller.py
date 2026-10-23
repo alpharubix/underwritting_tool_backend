@@ -222,6 +222,9 @@ async def user_logout(request):
     if x_client_portal == "user":
         token_key = "user_access_token"
 
+    elif x_client_portal == "ADMIN":
+        token_key = "admin_access_token"
+
     elif x_client_portal in ("ANCHOR","SUPER_ANCHOR"):
         token_key = "anchor_access_token"
 
@@ -650,7 +653,7 @@ async def login_admin(request:Request):
 
             token = create_access_token({
                         "user_id": str(admin["_id"]),
-                        "role": admin_role
+                        "role": 'ADMIN'
                     })
             
 
