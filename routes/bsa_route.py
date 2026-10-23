@@ -61,7 +61,7 @@ async def upload_bsa(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(None),
     data: str = Form(None),  # This will be the JSON string of your data block
-    cust_id = str | None = None
+    cust_id : str | None = None
 ):
     # Convert string back to dictionary
     try:
@@ -84,6 +84,7 @@ async def upload_bsa(
             mongodb_connection=request.app.state.mongo_db,
             data_params=data_params,
             background_task=background_tasks,
+            cust_id=cust_id
         )
     except JSONDecodeError:
         raise HTTPException(
