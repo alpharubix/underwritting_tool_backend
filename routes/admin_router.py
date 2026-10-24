@@ -27,5 +27,5 @@ async def get_anchors_route(request:Request,page:int=1):
     return await get_anchors(request,page)
 
 @admin_router.get('/payments')
-async def get_payments_route(request:Request,page:int=1):
-    return await get_payments(request,page)
+async def get_payments_route(request:Request,page:int=1,limit=10):
+    return await get_payments(request,page,limit)

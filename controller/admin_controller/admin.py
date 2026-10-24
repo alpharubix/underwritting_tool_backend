@@ -1,7 +1,7 @@
 import math
 from typing import Any
 
-from fastapi import Body, HTTPException, Header,Request,status
+from fastapi import Body, HTTPException, Header, Query,Request,status
 from bson import ObjectId
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -550,51 +550,78 @@ async def get_current_admin(user_id,db):
     except Exception as e:
         raise e
 
-async def get_payments(request,page):
+async def get_payments(
+    request: Request,
+    page: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=100),
+):
     try:
         requester_role = request.state.role
+
         if requester_role not in ALLOWED_ROLES:
             return JSONResponse(
-                        content={
-                            "message": "Forbidden access !",
-                            "role": requester_role
-                        },
-                        status_code=status.HTTP_403_FORBIDDEN
-                    )
-        db = request.app.state.mongo_db
-        filters = dict(request.query_params)
+                content={
+                    "message": "Forbidden access!",
+                    "role": requester_role,
+                },
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
-        VALID_FILTERS = (
-            'reference_id',"user_id","requested_by","requested_by_role","service","amount","wallet_status","service_status","upstream_status","created_at","updated_at")
+        db = request.app.state.mongo_db
+
+        filters = dict(request.query_params)
+        filters.pop("page", None)
+        filters.pop("limit", None)
+
+        VALID_FILTERS = {
+            "reference_id",
+            "user_id",
+            "requested_by",
+            "requested_by_role",
+            "service",
+            "amount",
+            "wallet_status",
+            "service_status",
+            "upstream_status",
+            "created_at",
+            "updated_at",
+        }
 
         if not all(key in VALID_FILTERS for key in filters):
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"message":"Invalid filters for getting payments"}
+                content={"message": "Invalid filters for getting payments"},
             )
-        if filters:
-            payments = await db.service_requests.find(filters).to_list(length=None)
 
-            for payment in payments:
-                payment["_id"] = str(payment["_id"])
+        # Count matching documents before pagination
+        total_records = await db.service_requests.count_documents(filters)
 
-                if payment.get("created_at"):
-                    payment["created_at"] = payment["created_at"].isoformat()
+        # Fetch only the requested page
+        skip = (page - 1) * limit
 
-                if payment.get("updated_at"):
-                    payment["updated_at"] = payment["updated_at"].isoformat()
+        payments = await db.service_requests.find(filters) \
+            .sort("created_at", -1) \
+            .skip(skip) \
+            .limit(limit) \
+            .to_list(length=limit)
 
-            return payments
-        
-        payments = await db.service_requests.find({}).to_list(length=None)
+        # Serialize MongoDB-specific values
         for payment in payments:
             payment["_id"] = str(payment["_id"])
 
-            if payment.get("created_at"):
-                payment["created_at"] = payment["created_at"].isoformat()
+            for field in ("created_at", "updated_at"):
+                if payment.get(field):
+                    payment[field] = payment[field].isoformat()
 
-            if payment.get("updated_at"):
-                payment["updated_at"] = payment["updated_at"].isoformat()
-        return payments
-    except Exception as e:
-        raise e 
+        return {
+            "data": payments,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total_records": total_records,
+                "total_pages": (total_records + limit - 1) // limit,
+            }
+        }
+
+    except Exception:
+        raise
