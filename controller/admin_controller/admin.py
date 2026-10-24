@@ -1,4 +1,5 @@
 import math
+import re
 from typing import Any
 
 from fastapi import Body, HTTPException, Header, Query,Request,status
@@ -573,6 +574,9 @@ async def get_payments(
         filters.pop("page", None)
         filters.pop("limit", None)
 
+        for key, value in filters.items():
+            filters[key] = {"$regex": f"^{re.escape(value)}", "$options": "i"}
+            
         VALID_FILTERS = {
             "reference_id",
             "user_id",
@@ -597,6 +601,8 @@ async def get_payments(
         total_records = await db.service_requests.count_documents(filters)
 
         # Fetch only the requested page
+        page = int(page)
+        limit = int(limit)
         skip = (page - 1) * limit
 
         payments = await db.service_requests.find(filters) \
