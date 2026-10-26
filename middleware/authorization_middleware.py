@@ -73,7 +73,6 @@ async def authorization(request: Request, call_next):
                 return JSONResponse(status_code=400, content={"message": "X-Client-Portal header is missing"})
 
             if x_client_portal == "user":
-
                 user_access_token = request.cookies.get("user_access_token")
                 if not user_access_token:
                     return JSONResponse(
@@ -92,6 +91,13 @@ async def authorization(request: Request, call_next):
                 decoded_jwt_token = get_decoded_jwt_token(anchor_access_token)
                 print("Decoded JWT Token:", decoded_jwt_token)
 
+            if x_client_portal=="ADMIN":
+                admin_access_token = request.cookies.get("admin_access_token")
+
+                if not admin_access_token:
+                    return JSONResponse(
+                        content={"message"}
+                    )
             request.state.user_id = decoded_jwt_token["user_id"]
             request.state.role = decoded_jwt_token["role"]
             user = request.state.user_id
