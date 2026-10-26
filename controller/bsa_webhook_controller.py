@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 from datetime import datetime, timezone
 import os
@@ -329,6 +331,7 @@ async def fetch_and_save_bank_report(db, user_id, reference_id, json_url,referen
             return False
 
     except Exception as e:
+        logging.exception("ERROR in fetch_and_save_bank_report")
         print(f"ERROR in fetch_and_save_bank_report: {e}")
         return False
 

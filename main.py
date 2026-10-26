@@ -1,14 +1,9 @@
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-
 import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-
-from controller.bsa_uploads import UploadHashMap
-from controller.itr_controller.itr_analyzer_controller import poll_email_link_status
 from database.databse_config import get_mongo_db, get_postgres_conn
 from middleware.authorization_middleware import authorization
 from middleware.api_logging_middleware import api_logging
@@ -51,7 +46,6 @@ async def connect_to_databases(app: FastAPI): #database first approch
         app.state.mongo_db  = mongo_db
         app.state.postgres_conn = postgres_conn
         print('database connected successfully')
-        asyncio.create_task(poll_email_link_status(app.state.mongo_db))
         yield
     except Exception as e:
         print("Error connecting to databases",e)
