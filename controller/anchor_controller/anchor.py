@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import math
+import re
 from typing import Any
 
 from bson import ObjectId
@@ -9,7 +10,7 @@ from starlette import status as status
 from utils.mappers.ModuleMapping import ModuleMapping,ModuleProjection
 
 
-ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR"}
+ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR","SUPER_ADMIN","ADMIN"}
 
 async def get_associated_anchors(request: Request,page:int=1):
 
@@ -17,7 +18,10 @@ async def get_associated_anchors(request: Request,page:int=1):
     requester_role = request.state.role
     user_id = request.state.user_id
 
-    if requester_role != "SUPER_ANCHOR":
+    x_client_portal = request.headers.get('X-Client-Portal')
+
+    if requester_role != "SUPER_ANCHOR" and x_client_portal!='ADMIN':
+        
         return JSONResponse(
             content={
                 "message": "Forbidden access !",
@@ -210,15 +214,19 @@ async def delete_anchor(request:Request,login_id:str):
             status_code=status.HTTP_410_GONE
             )
 
-async def get_users(request:Request,page:int=1):
-    limit = 10
+async def get_users(request: Request, page: int = 1):
+    try:
+        limit_param = request.query_params.get("limit")
+        limit = min(max(int(limit_param), 1), 1000) if limit_param else 10
+    except (ValueError, TypeError):
+        limit = 10
 
     EXPECTED_FILTERS = {
-        "_id":str,
+        "_id": str,
         "account_id": int,
         "customer_name": str,
         "company_name": str,
-        "email_id":str,
+        "email_id": str,
         "phone": str,
         "gst_number": str,
         "status": str,
@@ -227,43 +235,76 @@ async def get_users(request:Request,page:int=1):
         "anchor_id": ObjectId,
     }
 
-
-    #ROLE Validation 
+    # ROLE Validation 
     requester_role = request.state.role
-    print(requester_role)
-    if requester_role not in ALLOWED_ROLES:
+    x_client_portal = request.headers.get('X-Client-Portal')
+    if requester_role not in ALLOWED_ROLES and x_client_portal != 'ADMIN':
         return JSONResponse(
             content={"message": "Forbidden access"},
             status_code=status.HTTP_403_FORBIDDEN
         )
 
-
-
-    #Empty filters validation - may not be used much as frontend is directly sending the correct filters only
+    db = request.app.state.mongo_db
     filters = dict(request.query_params)
+    filters.pop("limit", None)
+    filters.pop("page", None)
     query = {}
-    # if not filters:
-    #     return JSONResponse(
-    #         content={"message": "Filters are needed | Got empty filters"},
-    #         status_code=status.HTTP_400_BAD_REQUEST
-    #     )
 
-    if requester_role == "SUPER_ANCHOR":
-        if filters.get("_id") is None:
+    if requester_role in ["SUPER_ANCHOR", "SUPER_ADMIN", "ADMIN"]:
+        target_id = filters.pop("_id", None) or filters.pop("anchor_id", None) or filters.pop("id", None)
+        if target_id is None and requester_role == "SUPER_ANCHOR":
             return JSONResponse(
                 content={"message": "id is required!"},
                 status_code=status.HTTP_400_BAD_REQUEST
             )
-        _id = ObjectId(filters.get("_id"))
-        filters["_id"] = _id #id requst.user-id
-        query["anchor_id"] = _id
-        filters.pop("_id")
 
-    if requester_role == "ANCHOR":
+        if target_id:
+            anchor_conditions = []
+            anchor_obj_id = None
+            anchor_code_val = None
+
+            if ObjectId.is_valid(target_id):
+                anchor_obj_id = ObjectId(target_id)
+                anchor_doc = await db.anchors.find_one({"_id": anchor_obj_id})
+                if anchor_doc:
+                    anchor_code_val = anchor_doc.get("anchor_code")
+            else:
+                anchor_doc = await db.anchors.find_one({
+                    "$or": [
+                        {"anchor_code": target_id},
+                        {"login_id": target_id},
+                        {"anchor_name": {"$regex": f"^{re.escape(target_id)}$", "$options": "i"}}
+                    ]
+                })
+                if anchor_doc:
+                    anchor_obj_id = anchor_doc.get("_id")
+                    anchor_code_val = anchor_doc.get("anchor_code")
+                else:
+                    anchor_code_val = target_id
+
+            if anchor_obj_id:
+                anchor_conditions.append({"anchor_id": anchor_obj_id})
+                anchor_conditions.append({"anchor_id": str(anchor_obj_id)})
+            if anchor_code_val:
+                anchor_conditions.append({"anchor_code": anchor_code_val})
+                anchor_conditions.append({"site_code": anchor_code_val})
+                anchor_conditions.append({"anchor_id": anchor_code_val})
+            if not anchor_conditions:
+                anchor_conditions.append({"anchor_id": target_id})
+
+            query["$or"] = anchor_conditions
+
+    elif requester_role == "ANCHOR":
         user_id = request.state.user_id
-        query["anchor_id"] = ObjectId(user_id)
+        anchor_conditions = [{"anchor_id": ObjectId(user_id)}, {"anchor_id": str(user_id)}]
+        anchor_doc = await db.anchors.find_one({"_id": ObjectId(user_id)})
+        if anchor_doc and anchor_doc.get("anchor_code"):
+            anc_code = anchor_doc.get("anchor_code")
+            anchor_conditions.append({"anchor_code": anc_code})
+            anchor_conditions.append({"site_code": anc_code})
+        query["$or"] = anchor_conditions
 
-    #Filters checking
+    # Filters checking
     wrong_filters = set(filters.keys()) - set(EXPECTED_FILTERS.keys())
     for wrong_filter in wrong_filters:
         filters.pop(wrong_filter)
@@ -483,8 +524,8 @@ async def get_users_reports(request:Request,module:str,cust_id:str,page:int):
     requester_role = request.state.role
     ALLOWED_MODULES = ("bsa","gst","cibil","itr")
     limit =10
-
-    if requester_role not in ALLOWED_ROLES:
+    x_client_portal = request.headers.get('X-Client-Portal')
+    if requester_role not in ALLOWED_ROLES and x_client_portal!="ADMIN":
         return JSONResponse(
             content={"message":"Forbidden access ! "},
             status_code=status.HTTP_403_FORBIDDEN

@@ -23,12 +23,10 @@ ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN"}
 #     """
 #         role -> superadmin 
 #         module -> admin,user
-
 #     """
 #     db = request.app.state.mongo_db
 #     requester_role = request.state.role
 #     ALLOWED_MODULES = {"ADMIN","USERS"}
-
 #     module=module.lower() 
 #     if requester_role=="SUPER_ADMIN":
 #         #fetch the collection of module dynamically
@@ -40,12 +38,9 @@ ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN"}
 #         #fetch the modules 
 #         else:
 #             data = await db.module.find({},{"_id":0})
-
 #     else:
 #         #HE IS ADMIN
 #         pass    
-
-
 
 async def update_admin(request:Request,incoming_login_id:str):
     #ONLY SUPER ADMIN PREVILEGE
@@ -88,7 +83,6 @@ async def update_admin(request:Request,incoming_login_id:str):
 
     target_admin = await db.admins.find_one({
         "login_id":incoming_login_id
-
     })
 
     if not target_admin :
@@ -137,6 +131,7 @@ async def update_admin(request:Request,incoming_login_id:str):
         content={"message":f"Admin with the login-id : {incoming_login_id} has been updated successfully",**final_updated_data},
         status_code=status.HTTP_200_OK
     )
+
 async def delete_admin(request:Request,login_id:str):
     requester_role = request.state.role
 
@@ -173,112 +168,23 @@ async def delete_admin(request:Request,login_id:str):
             status_code=status.HTTP_410_GONE
             )
 
-
-# async def dashboard_admins(request:Request):
-#     db = request.app.state.mongo_db
-#     requester_role = request.state.role
-#     # if super-admin - admins and super-anchors and anchors
-#     # if admin - super-anchors , anchors and users
-#     # if super-anchors - anchors , users
-#     # if anchors - users
-#     print("Requester Role : ",requester_role)
-
-#     ALLOWED_ROLES = {"SUPER_ADMIN","ADMIN","SUPER_ANCHOR","ANCHOR"}
-
-#     if requester_role not in ALLOWED_ROLES:
-#         print("Inside not allowed roles")
-#         return JSONResponse(
-#             content={"message":"Forbidden access !"},
-#             status_code=status.HTTP_403_FORBIDDEN
-#         )
-    
-#     user_id = request.state.user_id
-#     users =  await db.users.find({"anchor_id":user_id},{"_id":0}).to_list(length=None)
-
-#     if requester_role == "SUPER_ADMIN":
-#         # admins, super_anchors, anchors,users
-#         admins = await db.admins.find({"role":"ADMIN"},{"_id":0}).to_list(length=None)
-#         super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
-#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-#         data = {"role":requester_role,"super_anchors":super_anchors,"admins":admins,"anchors":anchors,"users":users}
-#         return data
-
-#     elif requester_role == "ADMIN":
-#         #super_anchors, anchors,users
-#         super_anchors = await db.anchors.find({"role":"SUPER_ANCHOR"},{"_id":0}).to_list(length=None)
-#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-#         data = {"role":requester_role,"super_anchors":super_anchors,"anchors":anchors,"users":users}
-#         return data
-
-#     elif requester_role == "SUPER_ANCHOR":
-#         # anchors, users
-#         anchors = await db.anchors.find({"role":"ANCHOR"},{"_id":0}).to_list(length=None)
-#         data = {"role":requester_role,"anchors":anchors,"users":users}
-#         return data
-
-#     else:
-#         #anchor
-#         #view USERS info, he is admin
-#         data={"role":requester_role,"users":users}
-#         return data
-
-# async def get_userss(request:Request,page:int):
-    
-#     limit=10
-#     db = request.app.state.mongo_db
-#     requester_role = request.state.role
-#     skip = (page-1)*limit
-#     print(requester_role)
-#     if requester_role not in ALLOWED_ROLES:
-#         return JSONResponse(
-#             content={
-#                 "message": "You are not authorized to access users"
-#             },
-#             status_code=status.HTTP_403_FORBIDDEN
-#         )   
-
-#     total_users = await db.users.count_documents({})
-
-#     projection = {
-#         "_id":0,
-#         "created_at":0,
-#         "updated_at":0,
-#         "anchor_id":0
-#     }
-    
-
-#     users = await db.users.find({},projection).skip(skip).limit(limit).to_list(length=limit)
-#     current_range = f"{((page-1)*limit)+1}-{(page)*limit}"
-
-#     return JSONResponse(
-#         content={
-#                     "message":"Users fetched successfully",
-#                     "data":users,
-#                     "pagination": {
-#                         "page": page,
-#                         "current_range":current_range,
-#                         "total": total_users,
-#                         "remaining_records":total_users-(page*limit),
-#                         "total_pages":total_users//limit
-#                     }
-#                 },
-#         status_code=status.HTTP_200_OK
-#     )
-
-async def get_users(request: Request,page:int):
-    limit = 10
+async def get_users(request: Request, page: int):
+    try:
+        limit_param = request.query_params.get("limit")
+        limit = min(max(int(limit_param), 1), 1000) if limit_param else 10
+    except (ValueError, TypeError):
+        limit = 10
     
     EXPECTED_FILTERS = {
         "account_id": int,
         "customer_name": str,
         "company_name": str,
-        "email_id":str,
+        "email_id": str,
         "phone": str,
         "gst_number": str,
         "status": str,
         "created_at": datetime,
         "updated_at": datetime,
-        "anchor_id": ObjectId
     }
 
     #ROLE Validation 
@@ -291,18 +197,66 @@ async def get_users(request: Request,page:int):
     
     #Empty filters validation - may not be used much as frontend is directly sending the correct filters only
     filters = dict(request.query_params)
-    # if not filters:
-    #     return JSONResponse(
-    #         content={"message": "Filters are needed | Got empty filters"},
-    #         status_code=status.HTTP_400_BAD_REQUEST
-    #     )
+    filters.pop("limit", None)
+    filters.pop("page", None)
+
+    db = request.app.state.mongo_db
+    query = {}
+
+    target_anchor = (
+        filters.pop("anchor_id", None) or 
+        filters.pop("anchor_code", None) or 
+        filters.pop("site_code", None) or 
+        filters.pop("id", None) or
+        filters.pop("_id", None)
+    )
+
+    if target_anchor:
+        anchor_obj_id = None
+        anchor_code_val = None
+        anchor_login_val = None
+
+        if ObjectId.is_valid(target_anchor):
+            anchor_obj_id = ObjectId(target_anchor)
+            anchor_doc = await db.anchors.find_one({"_id": anchor_obj_id})
+            if anchor_doc:
+                anchor_code_val = anchor_doc.get("anchor_code")
+                anchor_login_val = anchor_doc.get("login_id")
+        else:
+            anchor_doc = await db.anchors.find_one({
+                "$or": [
+                    {"anchor_code": target_anchor},
+                    {"login_id": target_anchor},
+                    {"anchor_name": {"$regex": f"^{re.escape(target_anchor)}$", "$options": "i"}}
+                ]
+            })
+            if anchor_doc:
+                anchor_obj_id = anchor_doc.get("_id")
+                anchor_code_val = anchor_doc.get("anchor_code")
+                anchor_login_val = anchor_doc.get("login_id")
+            else:
+                anchor_code_val = target_anchor
+
+        anchor_conditions = []
+        if anchor_obj_id:
+            anchor_conditions.append({"anchor_id": anchor_obj_id})
+            anchor_conditions.append({"anchor_id": str(anchor_obj_id)})
+        if anchor_code_val:
+            anchor_conditions.append({"anchor_code": anchor_code_val})
+            anchor_conditions.append({"site_code": anchor_code_val})
+            anchor_conditions.append({"anchor_id": anchor_code_val})
+        if anchor_login_val:
+            anchor_conditions.append({"anchor_id": anchor_login_val})
+        if not anchor_conditions:
+            anchor_conditions.append({"anchor_id": target_anchor})
+
+        query["$or"] = anchor_conditions
 
     #Filters checking
     wrong_filters = set(filters.keys()) - set(EXPECTED_FILTERS.keys())
     for wrong_filter in wrong_filters:
         filters.pop(wrong_filter)
 
-    query = {}
     for filter, filter_val in filters.items():
 
         filter_type = EXPECTED_FILTERS[filter]
@@ -341,7 +295,6 @@ async def get_users(request: Request,page:int):
             }
         else:
             query[filter] = filter_val                  
-    db = request.app.state.mongo_db
 
     skip = (page - 1) * limit
     users = await db.users.aggregate([
@@ -358,13 +311,124 @@ async def get_users(request: Request,page:int):
         },
         {
             "$limit": limit
+        },
+        {
+            "$lookup": {
+                "from": "bsa_merged_bankstatements",
+                "let": {
+                    "user_id": {"$toString": "$_id"}
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": ["$user_id", "$$user_id"]
+                            }
+                        }
+                    },
+                    {
+                        "$limit": 1
+                    }
+                ],
+                "as": "bsa_status"
+            }
+        },
+        {
+            "$lookup": {
+                "from": "gst_analyzed_report",
+                "let": {
+                    "user_id": {"$toString": "$_id"}
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": ["$user_id", "$$user_id"]
+                            }
+                        }
+                    },
+                    {
+                        "$limit": 1
+                    }
+                ],
+                "as": "gst_status"
+            }
+        },
+        {
+            "$lookup": {
+                "from": "itr_analyzed_report",
+                "let": {
+                    "user_id": {"$toString": "$_id"}
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": ["$user_id", "$$user_id"]
+                            }
+                        }
+                    },
+                    {
+                        "$limit": 1
+                    }
+                ],
+                "as": "itr_status"
+            }
+        },
+        {
+            "$lookup": {
+                "from": "cibil_report",
+                "let": {
+                    "user_id": {"$toString": "$_id"}
+                },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": {
+                                "$eq": ["$user_id", "$$user_id"]
+                            }
+                        }
+                    },
+                    {
+                        "$limit": 1
+                    }
+                ],
+                "as": "cibil_status"
+            }
+        },
+        {
+            "$set": {
+                "bsa_status": {
+                    "$gt": [
+                        {"$size": "$bsa_status"},
+                        0
+                    ]
+                },
+                "gst_status": {
+                    "$gt": [
+                        {"$size": "$gst_status"},
+                        0
+                    ]
+                },
+                "itr_status": {
+                    "$gt": [
+                        {"$size": "$itr_status"},
+                        0
+                    ]
+                },
+                "cibil_status": {
+                    "$gt": [
+                        {"$size": "$cibil_status"},
+                        0
+                    ]
+                }
+            }
         }
     ]).to_list(length=limit)
 
-    total_users = await db.users.count_documents({})
+    total_users = await db.users.count_documents(query)
 
     total_pages=math.ceil(total_users / limit)
-
 
     for user in users:
         user["_id"] = str(user["_id"])
@@ -377,7 +441,6 @@ async def get_users(request: Request,page:int):
 
         if "updated_at" in user:
             user["updated_at"] = user["updated_at"].isoformat()
-
 
     response_status = True
     if page>total_pages or len(users)<1:
@@ -415,7 +478,6 @@ async def get_admins_list(
     # Remove pagination parameters
     filters.pop("page", None)
     
-
     query = {}
 
     # Build filters here
@@ -497,7 +559,7 @@ async def get_anchors(request: Request,page:int=1):
 
     projection = {
         "$project": {
-            "_id": 0,
+            "_id": {"$toString": "$_id"},
             "anchor_name": 1,
             "anchor_code": 1,
             "login_id": 1,
@@ -509,7 +571,6 @@ async def get_anchors(request: Request,page:int=1):
             "updated_by": {"$toString": "$updated_by"}
         }
     }
-
 
     anchor_docs = await (
         db.anchors
@@ -541,6 +602,7 @@ async def get_anchors(request: Request,page:int=1):
         },
         status_code=status.HTTP_200_OK
     )
+
 async def get_current_admin(user_id,db):
     try:
         admin = db.admins.find_one({
@@ -630,4 +692,6 @@ async def get_payments(
         }
 
     except Exception:
+        raise
+
         raise

@@ -219,7 +219,7 @@ async def user_logout(request):
     response = JSONResponse(status_code=status.HTTP_200_OK, content={"message":"Logout successful"})
 
     print("X-Client-Portal header value:", x_client_portal)
-    
+
     if x_client_portal == "user":
         token_key = "user_access_token"
 
@@ -640,6 +640,7 @@ async def login_admin(request:Request):
             print(user_id)
             admin_role = admin.get("role")
 
+            print("Role found is ",admin_role)
             auth_doc= await db.auth.find_one({
                 "user_id":user_id
             })
@@ -654,7 +655,7 @@ async def login_admin(request:Request):
 
             token = create_access_token({
                         "user_id": str(admin["_id"]),
-                        "role": 'ADMIN'
+                        "role": admin_role
                     })
             
 
