@@ -29,7 +29,7 @@ from controller.payments_controller.wallet_contoller import consume_reserved_bal
 logger = logging.getLogger(__name__)
 from fastapi import status as status
 
-ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN')
+ALLOWED_ROLES=('ANCHOR','SUPER_ANCHOR','ADMIN','SUPER_ADMIN')
 
 def _is_gstin_valid_for_new_registration(primary_gst,upcoming_gst):
         primary_pan = primary_gst[3:12]

@@ -219,8 +219,12 @@ async def user_logout(request):
     response = JSONResponse(status_code=status.HTTP_200_OK, content={"message":"Logout successful"})
 
     print("X-Client-Portal header value:", x_client_portal)
+
     if x_client_portal == "user":
         token_key = "user_access_token"
+
+    elif x_client_portal == "ADMIN":
+        token_key = "admin_access_token"
 
     elif x_client_portal in ("ANCHOR","SUPER_ANCHOR"):
         token_key = "anchor_access_token"
@@ -636,6 +640,7 @@ async def login_admin(request:Request):
             print(user_id)
             admin_role = admin.get("role")
 
+            print("Role found is ",admin_role)
             auth_doc= await db.auth.find_one({
                 "user_id":user_id
             })
@@ -662,7 +667,7 @@ async def login_admin(request:Request):
                     )
     
             response.set_cookie(
-                        key="access_token",
+                        key="admin_access_token",
                         value=token,
                         httponly=True,
                         secure=True,

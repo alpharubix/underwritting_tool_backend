@@ -92,6 +92,17 @@ async def authorization(request: Request, call_next):
                 decoded_jwt_token = get_decoded_jwt_token(anchor_access_token)
                 print("Decoded JWT Token:", decoded_jwt_token)
 
+            if x_client_portal=="ADMIN":
+                admin_access_token  = request.cookies.get("admin_access_token")
+
+                if not admin_access_token:
+                    return JSONResponse(
+                            status_code=401, content={"message": "Unauthorized Access"}
+                    )
+
+                decoded_jwt_token = get_decoded_jwt_token(admin_access_token)
+                print("Decoded JWT Token : ",decoded_jwt_token)
+
             request.state.user_id = decoded_jwt_token["user_id"]
             request.state.role = decoded_jwt_token["role"]
             user = request.state.user_id

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import math
+import re
 from typing import Any
 
 from bson import ObjectId
@@ -9,7 +10,7 @@ from starlette import status as status
 from utils.mappers.ModuleMapping import ModuleMapping,ModuleProjection
 
 
-ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR"}
+ALLOWED_ROLES={"SUPER_ANCHOR","ANCHOR","SUPER_ADMIN","ADMIN"}
 
 async def get_associated_anchors(request: Request,page:int=1):
 
@@ -17,7 +18,10 @@ async def get_associated_anchors(request: Request,page:int=1):
     requester_role = request.state.role
     user_id = request.state.user_id
 
-    if requester_role != "SUPER_ANCHOR":
+    x_client_portal = request.headers.get('X-Client-Portal')
+
+    if requester_role != "SUPER_ANCHOR" and x_client_portal!='ADMIN':
+        
         return JSONResponse(
             content={
                 "message": "Forbidden access !",
@@ -210,281 +214,271 @@ async def delete_anchor(request:Request,login_id:str):
             status_code=status.HTTP_410_GONE
             )
 
-async def get_users(request:Request,page:int=1):
-    limit = 10
 
-    EXPECTED_FILTERS = {
-        "_id":str,
-        "account_id": int,
-        "customer_name": str,
-        "company_name": str,
-        "email_id":str,
-        "phone": str,
-        "gst_number": str,
-        "status": str,
-        "created_at": datetime,
-        "updated_at": datetime,
-        "anchor_id": ObjectId,
-    }
+async def get_users(request: Request, page: int = 1):
+    try:
+        limit = 10
+        db = request.app.state.mongo_db
 
+        expected_filters = {
+            "_id": str,
+            "account_id": int,
+            "customer_name": str,
+            "company_name": str,
+            "email_id": str,
+            "phone": str,
+            "gst_number": str,
+            "status": str,
+            "created_at": datetime,
+            "updated_at": datetime,
+            "anchor_id": ObjectId,
+        }
 
-    #ROLE Validation 
-    requester_role = request.state.role
-    print(requester_role)
-    if requester_role not in ALLOWED_ROLES:
-        return JSONResponse(
-            content={"message": "Forbidden access"},
-            status_code=status.HTTP_403_FORBIDDEN
-        )
+        # 1. Validate access
+        role = request.state.role
+        client_portal = request.headers.get("X-Client-Portal")
 
-
-
-    #Empty filters validation - may not be used much as frontend is directly sending the correct filters only
-    filters = dict(request.query_params)
-    query = {}
-    # if not filters:
-    #     return JSONResponse(
-    #         content={"message": "Filters are needed | Got empty filters"},
-    #         status_code=status.HTTP_400_BAD_REQUEST
-    #     )
-
-    if requester_role == "SUPER_ANCHOR":
-        if filters.get("_id") is None:
+        if role not in ALLOWED_ROLES and client_portal != "ADMIN":
             return JSONResponse(
-                content={"message": "id is required!"},
-                status_code=status.HTTP_400_BAD_REQUEST
+                content={"message": "Forbidden access"},
+                status_code=status.HTTP_403_FORBIDDEN,
             )
-        _id = ObjectId(filters.get("_id"))
-        filters["_id"] = _id #id requst.user-id
-        query["anchor_id"] = _id
-        filters.pop("_id")
 
-    if requester_role == "ANCHOR":
-        user_id = request.state.user_id
-        query["anchor_id"] = ObjectId(user_id)
+        # 2. Read filters
+        filters = dict(request.query_params)
+        filters.pop("limit", None)
+        filters.pop("page", None)
 
-    #Filters checking
-    wrong_filters = set(filters.keys()) - set(EXPECTED_FILTERS.keys())
-    for wrong_filter in wrong_filters:
-        filters.pop(wrong_filter)
+        query = {}
 
+        # 3. Apply anchor-based access
+        if role in ["SUPER_ANCHOR", "SUPER_ADMIN", "ADMIN"]:
+            target_id = (
+                filters.pop("_id", None)
+                or filters.pop("anchor_id", None)
+                or filters.pop("id", None)
+            )
 
-    for filter, filter_val in filters.items():
-
-        filter_type = EXPECTED_FILTERS[filter]
-        if filter_type == datetime:
-            try:
-                start_date = datetime.fromisoformat(filter_val)
-                end_date = start_date + timedelta(days=1)
-            except ValueError:
+            if target_id is None and role == "SUPER_ANCHOR":
                 return JSONResponse(
-                    content={"message": f"Invalid datetime value : {filter_val}"},
-                    status_code=status.HTTP_400_BAD_REQUEST
+                    content={"message": "id is required!"},
+                    status_code=status.HTTP_400_BAD_REQUEST,
                 )
 
-            query[filter] = {
-                "$gte": start_date,
-                "$lt": end_date
-            }
+            if target_id:
+                anchor_obj_id = None
+                anchor_code = None
 
-            continue
+                if ObjectId.is_valid(target_id):
+                    anchor_obj_id = ObjectId(target_id)
+                    anchor = await db.anchors.find_one(
+                        {"_id": anchor_obj_id}
+                    )
 
-        try:
-            filter_val = filter_type(filter_val)
-        except (ValueError, TypeError):
-            return JSONResponse(
-                content={
-                    "message": f"Invalid value for {filter} : {filter_val}"
-                },
-                status_code=status.HTTP_400_BAD_REQUEST
+                    if anchor:
+                        anchor_code = anchor.get("anchor_code")
+                else:
+                    anchor = await db.anchors.find_one({
+                        "$or": [
+                            {"anchor_code": target_id},
+                            {"login_id": target_id},
+                            {
+                                "anchor_name": {
+                                    "$regex": f"^{re.escape(target_id)}$",
+                                    "$options": "i",
+                                }
+                            },
+                        ]
+                    })
+
+                    if anchor:
+                        anchor_obj_id = anchor.get("_id")
+                        anchor_code = anchor.get("anchor_code")
+                    else:
+                        anchor_code = target_id
+
+                conditions = []
+
+                if anchor_obj_id:
+                    conditions.extend([
+                        {"anchor_id": anchor_obj_id},
+                        {"anchor_id": str(anchor_obj_id)},
+                    ])
+
+                if anchor_code:
+                    conditions.extend([
+                        {"anchor_code": anchor_code},
+                        {"site_code": anchor_code},
+                        {"anchor_id": anchor_code},
+                    ])
+
+                if not conditions:
+                    conditions.append({"anchor_id": target_id})
+
+                query["$or"] = conditions
+
+        elif role == "ANCHOR":
+            user_id = request.state.user_id
+            anchor_obj_id = ObjectId(user_id)
+
+            conditions = [
+                {"anchor_id": anchor_obj_id},
+                {"anchor_id": str(user_id)},
+            ]
+
+            anchor = await db.anchors.find_one(
+                {"_id": anchor_obj_id}
             )
 
-        if filter_type == str:
-            query[filter] = {
-                "$regex": f"^{filter_val}",
-                "$options": "i"
-            }
-        else:
-            query[filter] = filter_val                  
-    db = request.app.state.mongo_db
-    skip = (page - 1) * limit
-    users = await db.users.aggregate([
-        {
-            "$match": query
-        },
-        {
-            "$lookup":{
-                "from":"bsa_merged_bankstatements",
-                "let": {
-                    "user_id": {"$toString": "$_id"}
-                },
-                "pipeline":[
-                    {
-                        "$match":{
-                            "$expr":{
-                                "$eq":["$user_id","$$user_id"]
-                            }
-                        }
-                    },{
-                        "$limit":1
-                    }
-                ],
-                "as":"bsa_status"
-            }
-        },
-        {
-                    "$lookup":{
-                        "from":"gst_analyzed_report",
-                        "let": {
-                            "user_id": {"$toString": "$_id"}
+            if anchor and anchor.get("anchor_code"):
+                code = anchor["anchor_code"]
+                conditions.extend([
+                    {"anchor_code": code},
+                    {"site_code": code},
+                ])
+
+            query["$or"] = conditions
+
+        # 4. Validate and apply filters
+        for field in list(filters):
+            if field not in expected_filters:
+                filters.pop(field)
+
+        for field, value in filters.items():
+            field_type = expected_filters[field]
+
+            if field_type == datetime:
+                try:
+                    start_date = datetime.fromisoformat(value)
+                except ValueError:
+                    return JSONResponse(
+                        content={
+                            "message": f"Invalid datetime value : {value}"
                         },
-                        "pipeline":[
-                            {
-                                "$match":{
-                                    "$expr":{
-                                        "$eq":["$user_id","$$user_id"]
-                                    }
-                                }
-                            },{
-                                "$limit":1
-                            }
-                        ],
-                        "as":"gst_status"
-                    }
-        },
-        {
-                    "$lookup":{
-                        "from":"itr_analyzed_report",
-                        "let": {
-                            "user_id": {"$toString": "$_id"}
-                        },
-                        "pipeline":[
-                            {
-                                "$match":{
-                                    "$expr":{
-                                        "$eq":["$user_id","$$user_id"]
-                                    }
-                                }
-                            },{
-                                "$limit":1
-                            }
-                        ],
-                        "as":"itr_status"
-                    }
-        },
-        {
-                    "$lookup":{
-                        "from":"cibil_report",
-                        "let": {
-                            "user_id": {"$toString": "$_id"}
-                        },
-                        "pipeline":[
-                            {
-                                "$match":{
-                                    "$expr":{
-                                        "$eq":["$user_id","$$user_id"]
-                                    }
-                                }
-                            },{
-                                "$limit":1
-                            }
-                        ],
-                        "as":"cibil_status"
-                    }
-        },
-        {
-            "$set": {
-                "bsa_status": {
-                    "$gt": [
-                        {"$size": "$bsa_status"},
-                        0
-                    ]
-                },
-                "gst_status": {
-                    "$gt": [
-                        {"$size": "$gst_status"},
-                        0
-                    ]
-                },
-                "itr_status": {
-                    "$gt": [
-                        {"$size": "$itr_status"},
-                        0
-                    ]
-                },
-                "cibil_status": {
-                        "$gt": [
-                            {"$size": "$cibil_status"},
-                            0
-                        ]
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                query[field] = {
+                    "$gte": start_date,
+                    "$lt": start_date + timedelta(days=1),
                 }
-            }
-        },
+                continue
 
-    # Remove temporary lookup arrays
-        {
-            "$project": {
-                "is_deleted": 0,
-                "bsa_match": 0,
-                "gst_match": 0,
-                "itr_match": 0
-            }
-        },
-        {
-            "$project": {
-                "is_deleted": 0
-            }
-        },
-        {
-            "$skip": skip
-        },
-        {
-            "$limit": limit
+            try:
+                value = field_type(value)
+            except (ValueError, TypeError):
+                return JSONResponse(
+                    content={
+                        "message": f"Invalid value for {field} : {value}"
+                    },
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            query[field] = (
+                {"$regex": f"^{value}", "$options": "i"}
+                if field_type == str
+                else value
+            )
+
+        # 5. Check report availability
+        report_collections = {
+            "bsa_status": "bsa_merged_bankstatements",
+            "gst_status": "gst_analyzed_report",
+            "itr_status": "itr_analyzed_report",
+            "cibil_status": "cibil_report",
         }
-    ]).to_list(length=limit)
 
-    total_users = await db.users.count_documents(query)
+        pipeline = [{"$match": query}]
 
-    total_pages=math.ceil(total_users / limit)
+        for status_field, collection in report_collections.items():
+            pipeline.append({
+                "$lookup": {
+                    "from": collection,
+                    "let": {"user_id": {"$toString": "$_id"}},
+                    "pipeline": [
+                        {
+                            "$match": {
+                                "$expr": {
+                                    "$eq": ["$user_id", "$$user_id"]
+                                }
+                            }
+                        },
+                        {"$limit": 1},
+                    ],
+                    "as": status_field,
+                }
+            })
 
+        pipeline.append({
+            "$set": {
+                field: {"$gt": [{"$size": f"${field}"}, 0]}
+                for field in report_collections
+            }
+        })
 
-    for user in users:
-        user["_id"] = str(user["_id"])
-        if "anchor_id" in user:
-            user["anchor_id"] = str(user["anchor_id"])
+        pipeline.extend([
+            {
+                "$project": {
+                    "is_deleted": 0,
+                    "bsa_match": 0,
+                    "gst_match": 0,
+                    "itr_match": 0,
+                }
+            },
+            {"$skip": (page - 1) * limit},
+            {"$limit": limit},
+        ])
 
-        if "created_at" in user:
-            user["created_at"] = user["created_at"].isoformat()
+        # 6. Fetch users and count results
+        users = await db.users.aggregate(pipeline).to_list(
+            length=limit
+        )
 
-        if "updated_at" in user:
-            user["updated_at"] = user["updated_at"].isoformat()
+        total_users = await db.users.count_documents(query)
+        total_pages = math.ceil(total_users / limit)
 
+        # 7. Convert MongoDB values for JSON
+        for user in users:
+            user["_id"] = str(user["_id"])
 
-    response_status = True
-    if page>total_pages or len(users)<1:
-        # print("Less than 1" if len(users)<1 or "0")
-        print("Condition hit")
-        response_status=False
+            if "anchor_id" in user:
+                user["anchor_id"] = str(user["anchor_id"])
 
-    return JSONResponse(
-    content={
-        "message": "Users fetched successfully" if response_status else "No users fetched",
-        "data": users,
-        "page_info":{"page": page,
-        "limit": limit,
-        "total_pages":total_pages,
-        "total_data": total_users,
-    }},
-    status_code=status.HTTP_200_OK
-)
+            for field in ["created_at", "updated_at"]:
+                if field in user:
+                    user[field] = user[field].isoformat()
+
+        # 8. Return response
+        has_users = page <= total_pages and len(users) > 0
+
+        return JSONResponse(
+            content={
+                "message": (
+                    "Users fetched successfully"
+                    if has_users
+                    else "No users fetched"
+                ),
+                "data": users,
+                "page_info": {
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": total_pages,
+                    "total_data": total_users,
+                },
+            },
+            status_code=status.HTTP_200_OK,
+        )
+
+    except Exception as e:
+        raise e
 
 
 async def get_users_reports(request:Request,module:str,cust_id:str,page:int):
     requester_role = request.state.role
     ALLOWED_MODULES = ("bsa","gst","cibil","itr")
     limit =10
-
-    if requester_role not in ALLOWED_ROLES:
+    x_client_portal = request.headers.get('X-Client-Portal')
+    if requester_role not in ALLOWED_ROLES and x_client_portal!="ADMIN":
         return JSONResponse(
             content={"message":"Forbidden access ! "},
             status_code=status.HTTP_403_FORBIDDEN
