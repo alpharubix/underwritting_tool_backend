@@ -237,7 +237,7 @@ async def user_logout(request):
         path="/",
         httponly=True,
         secure=True,  # only if using HTTPS
-        samesite="lax"  # or "lax" depending on your setup
+        samesite="none"  # or "lax" depending on your setup
     )
     return response
 
@@ -671,7 +671,7 @@ async def login_admin(request:Request):
                         value=token,
                         httponly=True,
                         secure=True,
-                        samesite="lax",
+                        samesite="none",
                         path="/")
             return response
 
