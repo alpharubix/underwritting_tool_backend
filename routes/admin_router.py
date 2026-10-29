@@ -1,7 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, Body,Request,Query
-from controller.admin_controller.admin import update_admin,delete_admin,get_users,get_admins_list,get_anchors,get_payments
+from controller.admin_controller.admin import update_admin,delete_admin,get_users,get_admins_list,get_anchors,get_payments,get_service_requests_payments
 
 admin_router = APIRouter(prefix="/v1/admin")
 
@@ -29,3 +29,7 @@ async def get_anchors_route(request:Request,page:int=1):
 @admin_router.get('/payments')
 async def get_payments_route(request:Request,page:int=1,limit=10):
     return await get_payments(request,page,limit)
+
+@admin_router.get('/service-request-user')
+async def get_service_requests_payments_route(request:Request):
+    return await get_service_requests_payments(request)
