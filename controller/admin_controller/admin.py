@@ -694,6 +694,7 @@ async def get_payments(
         }
 
     except Exception:
+
         raise
 
 
@@ -717,7 +718,7 @@ async def get_service_requests_payments(request: Request):
             )
         
         db = request.app.state.mongo_db
-        payments = await db.service_requests.find({"user_id":user_id}) 
+        payments = await db.service_requests.find({"user_id":user_id}).to_list(length=None)
 
         # Serialize MongoDB-specific values
         for payment in payments:
