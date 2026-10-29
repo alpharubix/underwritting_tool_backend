@@ -178,7 +178,9 @@ async def update_gstin(request: Request,cust_id:Optional[str]=None)->JSONRespons
 
     try:
         user_id = request.state.user_id
-        user_coll: AsyncIOMotorCollection = request.app.state.mongo_db["users"]
+        db = request.app.state.mongo_db
+        user_coll: AsyncIOMotorCollection = db["users"]
+        
         requester_role = request.state.role
         if requester_role in ALLOWED_ROLES:
                     if not cust_id:
