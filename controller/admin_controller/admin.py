@@ -613,6 +613,7 @@ async def get_current_admin(user_id,db):
     except Exception as e:
         raise e
 
+
 async def get_payments(
     request: Request,
     page: int = Query(1, ge=1),
@@ -640,15 +641,16 @@ async def get_payments(
             filters[key] = {"$regex": f"^{re.escape(value)}", "$options": "i"}
             
         VALID_FILTERS = {
-            "reference_id",
+            "razorpay_payment_id",
+            "razorpay_order_id",
+            "razorpay_signature",
             "user_id",
-            "requested_by",
-            "requested_by_role",
-            "service",
+            "service_breakup",
             "amount",
+            "currency",
+            "payment_status",
+            "signature_verified",
             "wallet_status",
-            "service_status",
-            "upstream_status",
             "created_at",
             "updated_at",
         }
@@ -660,14 +662,14 @@ async def get_payments(
             )
 
         # Count matching documents before pagination
-        total_records = await db.service_requests.count_documents(filters)
+        total_records = await db.payments.count_documents(filters)
 
         # Fetch only the requested page
         page = int(page)
         limit = int(limit)
         skip = (page - 1) * limit
 
-        payments = await db.service_requests.find(filters) \
+        payments = await db.payments.find(filters) \
             .sort("created_at", -1) \
             .skip(skip) \
             .limit(limit) \
@@ -694,4 +696,38 @@ async def get_payments(
     except Exception:
         raise
 
-        raise
+
+async def get_service_requests_payments(request: Request):
+    try:
+        requester_role = request.state.role
+
+        if requester_role not in ALLOWED_ROLES:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={
+                    "message": "Forbidden access!"
+                }
+            )
+
+        user_id = request.query_params.get("user_id")
+        if not user_id:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"message":"User ID missing in Query parameters"}
+            )
+        
+        db = request.app.state.mongo_db
+        payments = await db.service_requests.find({"user_id":user_id}) 
+
+        # Serialize MongoDB-specific values
+        for payment in payments:
+            payment["_id"] = str(payment["_id"])
+            for field in ("created_at", "updated_at"):
+                if payment.get(field):
+                    payment[field] = payment[field].isoformat()
+                                        
+        return payments
+
+    except Exception as e:
+        raise e
+
