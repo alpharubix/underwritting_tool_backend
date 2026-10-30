@@ -61,4 +61,4 @@ async def r1xcrm_ratio_analysis(request: Request, acc_id:int)->JSONResponse:
 
 @itr_router.get("/export-report")
 async def export_report(request: Request, cust_id:Optional[str]=None)->JSONResponse:
-    return await export_itr_report(request)
+    return await export_itr_report(request,cust_id)

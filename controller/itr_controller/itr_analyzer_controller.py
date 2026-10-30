@@ -25,6 +25,7 @@ from services.service_request_service import create_service_request, get_service
 from utils.auth_utility import is_email_valid
 from controller.payments_controller.wallet_contoller import release_reserved_balance
 import httpx
+from config.config import AdminRole,AnchorRole
 logging.basicConfig(level=logging.INFO)
 
 ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
@@ -909,12 +910,21 @@ async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
     return await get_ratio_analysis(request,str(user["_id"]),is_crm=True)
 
 
-async def export_itr_report(request):
+async def export_itr_report(request:Request,cust_id):
     try:
-        user_id = request.state.user_id
-        coll = request.app.state.mongo_db["itr_reference"]
+        cust_id = request.query_params.get("cust_id")
+        requester_role = request.state.role
+        
+                            
+        if requester_role in (AdminRole.SUPER_ADMIN.value,AdminRole.ADMIN.value,AnchorRole.ANCHOR.value,AnchorRole.SUPER_ANCHOR.value):
+            user_id=cust_id
+        else:
+            user_id = request.state.user_id
 
+        coll = request.app.state.mongo_db["itr_reference"]
+        print("User ID for itr ",user_id)
         url_docs = await coll.find_one({"user_id":user_id,"is_consumed":True},{"_id":0,"itr_report_url":1})
+        print("URL docs found : ",url_docs)
 
         if not url_docs:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Report not found")
@@ -923,6 +933,7 @@ async def export_itr_report(request):
 
         async with httpx.AsyncClient() as client:
             excel_response = await client.get(url, headers={"clientId": os.getenv("CLIENT_ID"),"clientSecret": os.getenv("CLIENT_SECRET")})
+            print("Excel response : ",excel_response.text)
 
         if excel_response.status_code != 200:
             raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
