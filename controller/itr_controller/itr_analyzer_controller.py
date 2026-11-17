@@ -210,13 +210,15 @@ async def get_itr_link_status_based_on_user(request:Request,cust_id:Optional[str
                 "itr_reference_id":latest_link.get("reference_id",None),
                 "itr_link_response_code":latest_link.get("link_response_code"),
                 "link_response_message":latest_link.get("link_response_message"),
+                "itr_link_status":latest_link.get("link_status")
             }
             return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"status fetched successfully","data":link_status_data})
         else:
-            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed","data": {
-        "itr_reference_id": None,
-        "itr_link_response_code": None,
-        "link_response_message": None,
+            return JSONResponse(status_code=status.HTTP_200_OK,content={"message":"No report found proceed",
+            "data": {
+                "itr_reference_id": None,
+                "itr_link_response_code": None,
+                "link_response_message": None,
     }})
     except HTTPException as e:
         logging.error(msg=str(e), exc_info=True)
@@ -269,10 +271,10 @@ async def get_link_status_based_on_ref_id(request:Request) -> JSONResponse:
 
 
 async def poll_email_link_status(database_conn) : #this function will run every 5 sec and poll the external server for updates
-    print("ITR STATUS POLLING SERVICE STARTED")
+    # print("ITR STATUS POLLING SERVICE STARTED")
     while True:
         try:
-            print("POLLING ITR STATUS")
+            # print("POLLING ITR STATUS")
             database : AsyncIOMotorDatabase = database_conn
 
             itr_link_management = database["itr_link_management"]
@@ -328,7 +330,8 @@ async def poll_email_link_status(database_conn) : #this function will run every 
                             )
                         )
             else:
-                print("No PENDING REFERENCE LINKS FOUND")
+                # print("No PENDING REFERENCE LINKS FOUND")
+                pass
 
             if bulk_update:
                 await itr_link_management.bulk_write(bulk_update)
