@@ -27,7 +27,7 @@ from controller.payments_controller.wallet_contoller import release_reserved_bal
 import httpx
 logging.basicConfig(level=logging.INFO)
 
-ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN')
+ALLOWED_ROLES = ('ANCHOR','SUPER_ANCHOR','ADMIN','SUPER_ADMIN')
 
 async def initiate_itr_process (request: Request,cust_id:str)->JSONResponse:
     try:
@@ -911,7 +911,18 @@ async def get_r1xcrm_ratio_analysis(request:Request,acc_id:int)->JSONResponse:
 
 async def export_itr_report(request):
     try:
+
+        requester_role = request.state.role
         user_id = request.state.user_id
+        if requester_role in ALLOWED_ROLES:
+            cust_id = request.query_params.get("cust_id")
+            if not cust_id:
+                return JSONResponse(
+                    content={"message": "Forbidden Access!"},
+                    status_code=status.HTTP_403_FORBIDDEN
+                )
+            user_id = cust_id
+        
         coll = request.app.state.mongo_db["itr_reference"]
 
         url_docs = await coll.find_one({"user_id":user_id,"is_consumed":True},{"_id":0,"itr_report_url":1})
