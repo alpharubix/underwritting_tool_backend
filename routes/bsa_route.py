@@ -148,8 +148,11 @@ async def webhook_response(request: Request, background_tasks: BackgroundTasks):
         )
         if ref_doc and ref_doc.get("is_merge_request"):
             print(f"reference_id {reference_id} is a merge result — storing directly")
+            #getting the orginal reference_id's input_data
+            original_reference_doc = await mongodb_connection["bsa_reference"].find_one({"reference_id":ref_doc["input_data"][0]})
+            print(f"original_reference_doc {original_reference_doc}")
             background_tasks.add_task(
-                fetch_and_save_bank_report, db, user_id, reference_id, json_url, ref_doc
+                fetch_and_save_bank_report, db, user_id, reference_id, json_url, original_reference_doc
             )
             background_tasks.add_task(
                 send_report_mail_based_on_request,
