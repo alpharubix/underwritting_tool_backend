@@ -421,6 +421,18 @@ async def get_users(request: Request, page: int):
                         {"$size": "$cibil_status"},
                         0
                     ]
+                },
+                "bsa_created_at": {
+                    "$arrayElemAt": ["$bsa_status.created_at", 0]
+                },
+                "gst_created_at": {
+                    "$arrayElemAt": ["$gst_status.created_at", 0]
+                },
+                "itr_created_at": {
+                    "$arrayElemAt": ["$itr_status.created_at", 0]
+                },
+                "cibil_created_at": {
+                    "$arrayElemAt": ["$cibil_status.created_at", 0]
                 }
             }
         }
@@ -441,6 +453,10 @@ async def get_users(request: Request, page: int):
 
         if "updated_at" in user:
             user["updated_at"] = user["updated_at"].isoformat()
+
+        for field in ["bsa_created_at", "gst_created_at", "itr_created_at", "cibil_created_at"]:
+            if field in user and user[field]:
+                user[field] = user[field].isoformat()
 
     response_status = True
     if page>total_pages or len(users)<1:
